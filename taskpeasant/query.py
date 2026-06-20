@@ -15,23 +15,10 @@ Supported filter keys:
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
 from typing import List
 
+from ._dates import parse_date as _parse_tw_date
 from .task_model import Task
-
-
-def _parse_tw_date(s: str):
-    """Parse TW or ISO date → datetime (UTC). Returns None on failure."""
-    if not s:
-        return None
-    for fmt in ("%Y%m%dT%H%M%SZ", "%Y-%m-%dT%H:%M:%SZ",
-                "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
-        try:
-            return datetime.strptime(s, fmt).replace(tzinfo=timezone.utc)
-        except ValueError:
-            continue
-    return None
 
 
 class Filter:
@@ -73,7 +60,36 @@ class Filter:
                 else:
                     f._rules.append(lambda t, v=val: t.status == v)
 
-            # due.any: / scheduled.any: / due.none:  etc.
+            # project:<name>
+            elif tok.startswith("project:"):
+                val = tok[8:].lower()
+                f._rules.append(lambda t, v=val: t.project.lower() == v)
+
+            # priority:<H|M|L>
+            elif tok.startswith("priority:"):
+                val = tok[9:].upper()
+                f._rules.append(lambda t, v=val: t.priority.upper() == v)
+
+            # due.before:<date> / due.after:<date> / scheduled.* / wait.*
+            elif re.match(r'\w+\.(before|after):', tok):
+                field, rest_ = tok.split(".", 1)
+                qualifier, _, date_val = rest_.partition(":")
+                cutoff = _parse_tw_date(date_val)
+                if cutoff:
+                    if qualifier == "before":
+                        f._rules.append(
+                            lambda t, fld=field, cut=cutoff:
+                                bool(getattr(t, fld, "")) and
+                                _parse_tw_date(getattr(t, fld, "")) < cut
+                        )
+                    else:  # after
+                        f._rules.append(
+                            lambda t, fld=field, cut=cutoff:
+                                bool(getattr(t, fld, "")) and
+                                _parse_tw_date(getattr(t, fld, "")) > cut
+                        )
+
+            # due.any: / scheduled.any: / due.none: / project.any: etc.
             elif re.match(r'\w+\.(any|none):', tok):
                 field, _, qualifier = tok.partition(".")
                 presence = qualifier.startswith("any")

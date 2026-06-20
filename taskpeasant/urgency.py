@@ -19,16 +19,17 @@ from .task_model import Task
 # ── Tunable weights ─────────────────────────────────────────────────────────
 # Mirrors Taskwarrior's default coefficients for compatibility.
 WEIGHTS = {
-    "active":      15.0,   # task has a start timestamp (you're working on it)
-    "overdue":     12.0,   # past its due date
-    "due_today":    8.0,   # due within 24 hours
-    "due_soon":     4.0,   # due within 7 days
-    "scheduled":    2.0,   # has a scheduled date (planned work)
-    "tag_urgent":   6.0,   # tagged +urgent
-    "tag_next":     3.5,   # tagged +next
-    "annotations":  0.5,   # per annotation (shows engagement) — max 2.0
-    "age_per_day":  0.01,  # slight age bonus so old tasks don't rot — max 2.0
-    "blocked":     -5.0,   # has unresolved depends (can't act on it yet)
+    "active":        15.0,   # task has a start timestamp (you're working on it)
+    "overdue":       12.0,   # past its due date
+    "due_today":      8.0,   # due within 24 hours
+    "due_soon":       4.0,   # due within 7 days
+    "scheduled":      2.0,   # has a scheduled date (planned work)
+    "priority":      {"H": 6.0, "M": 3.9, "L": 1.8},
+    "tag_urgent":     6.0,   # tagged +urgent
+    "tag_next":       3.5,   # tagged +next
+    "annotations":    0.5,   # per annotation (shows engagement) — max 2.0
+    "age_per_day":    0.01,  # slight age bonus so old tasks don't rot — max 2.0
+    "blocked":       -5.0,   # has unresolved depends (can't act on it yet)
 }
 
 
@@ -71,6 +72,9 @@ def compute_urgency(task: Task) -> float:
     # ── Scheduled ────────────────────────────────────────────────────────────
     if task.scheduled:
         score += WEIGHTS["scheduled"]
+
+    # ── Priority ─────────────────────────────────────────────────────────────
+    score += WEIGHTS["priority"].get(task.priority, 0.0)
 
     # ── Tag bonuses ──────────────────────────────────────────────────────────
     tags_lower = {tg.lower() for tg in task.tags}

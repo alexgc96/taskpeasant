@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from .task_model import Task
-from .storage import read_tasks, write_tasks
+from .storage import read_tasks, write_tasks, assign_ids
 from .query import apply_filter
 
 
@@ -38,18 +38,23 @@ def _find_one(tasks: list[Task], uuid_prefix: str) -> Optional[Task]:
 # ── add ───────────────────────────────────────────────────────────────────────
 
 def cmd_add(yaml_path: str, description: str, tags: list = None,
-            due: str = "", scheduled: str = "") -> str:
+            due: str = "", scheduled: str = "", wait: str = "",
+            project: str = "", priority: str = "") -> str:
+    """Create a new task. Returns a confirmation string."""
     tasks    = read_tasks(yaml_path)
     new_uuid = str(_uuid_mod.uuid4())
     t = Task(
         uuid        = new_uuid,
         description = description,
-        status      = "pending",
+        status      = "waiting" if wait else "pending",
         entry       = _now_iso(),
         modified    = _now_iso(),
         tags        = list(tags or []),
         due         = due,
         scheduled   = scheduled,
+        wait        = wait,
+        project     = project,
+        priority    = priority,
     )
     tasks.append(t)
     write_tasks(yaml_path, tasks)
@@ -59,6 +64,7 @@ def cmd_add(yaml_path: str, description: str, tags: list = None,
 # ── done ──────────────────────────────────────────────────────────────────────
 
 def cmd_done(yaml_path: str, uuid_prefix: str) -> str:
+    """Mark a task completed. Sets end, clears start."""
     tasks = read_tasks(yaml_path)
     t     = _find_one(tasks, uuid_prefix)
     if not t:
@@ -76,6 +82,7 @@ def cmd_done(yaml_path: str, uuid_prefix: str) -> str:
 # ── delete ────────────────────────────────────────────────────────────────────
 
 def cmd_delete(yaml_path: str, uuid_prefix: str) -> str:
+    """Mark a task deleted. Sets end."""
     tasks = read_tasks(yaml_path)
     t     = _find_one(tasks, uuid_prefix)
     if not t:
@@ -90,6 +97,7 @@ def cmd_delete(yaml_path: str, uuid_prefix: str) -> str:
 # ── start / stop ──────────────────────────────────────────────────────────────
 
 def cmd_start(yaml_path: str, uuid_prefix: str) -> str:
+    """Set start to now — task becomes active."""
     tasks = read_tasks(yaml_path)
     t     = _find_one(tasks, uuid_prefix)
     if not t:
@@ -103,6 +111,7 @@ def cmd_start(yaml_path: str, uuid_prefix: str) -> str:
 
 
 def cmd_stop(yaml_path: str, uuid_prefix: str) -> str:
+    """Clear start — task becomes inactive."""
     tasks = read_tasks(yaml_path)
     t     = _find_one(tasks, uuid_prefix)
     if not t:
@@ -116,6 +125,7 @@ def cmd_stop(yaml_path: str, uuid_prefix: str) -> str:
 # ── annotate ──────────────────────────────────────────────────────────────────
 
 def cmd_annotate(yaml_path: str, uuid_prefix: str, note: str) -> str:
+    """Append an annotation to a task."""
     tasks = read_tasks(yaml_path)
     t     = _find_one(tasks, uuid_prefix)
     if not t:
@@ -141,14 +151,20 @@ def cmd_modify(yaml_path: str, uuid_prefix: str, mods: dict) -> str:
     for key, val in mods.items():
         if key == "description":
             t.description = val
-        elif key in ("due", "scheduled"):
+        elif key in ("due", "scheduled", "wait"):
             setattr(t, key, val)
+            if key == "wait" and val:
+                t.status = "waiting"
         elif key == "status":
             if val in ("pending", "completed", "deleted", "waiting"):
                 t.status = val
                 if val == "completed" and not t.end:
                     t.end   = _now_iso()
                     t.start = ""
+        elif key == "project":
+            t.project = val
+        elif key == "priority":
+            t.priority = val
         elif key == "tags_add":
             for tag in (val or []):
                 if tag not in t.tags:
@@ -171,6 +187,7 @@ def cmd_export(yaml_path: str, filter_tokens: list = None) -> list:
     """Return TW-wire-format dicts, ready to JSON-serialise for the UI."""
     from .urgency import compute_urgency
     tasks = read_tasks(yaml_path)
+    assign_ids(yaml_path, tasks)
     if filter_tokens:
         tasks = apply_filter(tasks, filter_tokens)
     for t in tasks:

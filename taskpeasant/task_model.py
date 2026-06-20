@@ -20,8 +20,8 @@ from typing import Optional
 # ── Canonical field names (subset of Taskwarrior's JSON schema) ──────────────
 _KNOWN_FIELDS = frozenset([
     "uuid", "description", "status", "entry", "start", "end",
-    "due", "scheduled", "modified", "tags", "depends", "annotations",
-    "urgency",
+    "due", "scheduled", "wait", "modified", "tags", "depends", "annotations",
+    "urgency", "project", "priority",
 ])
 
 _VALID_STATUSES = frozenset(["pending", "completed", "deleted", "waiting"])
@@ -90,17 +90,22 @@ class Task:
     end:       str = ""                # set when completed or deleted
     due:       str = ""
     scheduled: str = ""
+    wait:      str = ""   # hide task until this date; auto-transitions waiting→pending
     modified:  str = ""
 
     tags:        list = field(default_factory=list)
     depends:     list = field(default_factory=list)   # list of UUID strings
     annotations: list = field(default_factory=list)   # [{entry, description}]
 
+    project:  str = ""   # TW-compatible project name
+    priority: str = ""   # H | M | L  (Taskwarrior priority values)
+
     # Any non-standard keys land here — preserved on round-trip
     udas: dict = field(default_factory=dict)
 
     # Computed at runtime — never persisted
     urgency_value: float = field(default=0.0, repr=False)
+    id:            int   = field(default=0,   repr=False)
 
     # ── Serialisation ──────────────────────────────────────────────────────
 
@@ -116,10 +121,14 @@ class Task:
             "entry":       self.entry,
         }
         # Optional date fields — omit empties to keep YAML clean
-        for key in ("start", "end", "due", "scheduled", "modified"):
+        for key in ("start", "end", "due", "scheduled", "wait", "modified"):
             v = getattr(self, key)
             if v:
                 d[key] = v
+        if self.project:
+            d["project"] = self.project
+        if self.priority:
+            d["priority"] = self.priority
         if self.tags:
             d["tags"] = list(self.tags)
         if self.depends:
@@ -167,10 +176,13 @@ class Task:
             end         = str(known.get("end") or ""),
             due         = str(known.get("due") or ""),
             scheduled   = str(known.get("scheduled") or ""),
+            wait        = str(known.get("wait") or ""),
             modified    = str(known.get("modified") or ""),
             tags        = raw_tags,
             depends     = raw_deps,
             annotations = list(known.get("annotations") or []),
+            project     = str(known.get("project") or ""),
+            priority    = str(known.get("priority") or ""),
             udas        = udas,
         )
         if t.status not in _VALID_STATUSES:
@@ -183,6 +195,7 @@ class Task:
         UI JS (which expects TW wire dates) needs zero changes.
         """
         d: dict = {
+            "id":          self.id,
             "uuid":        self.uuid,
             "description": self.description,
             "status":      self.status,
@@ -191,10 +204,14 @@ class Task:
             # is_active mirrors TW: True when start is set
             "is_active":   bool(self.start),
         }
-        for key in ("start", "end", "due", "scheduled", "modified"):
+        for key in ("start", "end", "due", "scheduled", "wait", "modified"):
             v = getattr(self, key)
             if v:
                 d[key] = _iso_to_tw(v)
+        if self.project:
+            d["project"] = self.project
+        if self.priority:
+            d["priority"] = self.priority
         if self.tags:
             d["tags"] = list(self.tags)
         if self.depends:

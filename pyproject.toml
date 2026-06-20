@@ -1,0 +1,34 @@
+[build-system]
+requires      = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name            = "taskpeasant"
+version         = "0.1.0"
+description     = "YAML-native, pure-Python task backend. Drop-in Taskwarrior alternative for local-first apps."
+readme          = "README.md"
+license         = { text = "GPL-3.0-or-later" }
+requires-python = ">=3.9"
+authors         = [{ name = "analogtrsh studio" }]
+keywords        = ["taskwarrior", "tasks", "todo", "yaml", "local-first"]
+classifiers     = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Office/Business :: Scheduling",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies    = [
+    "PyYAML>=6.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/alexgc96/taskpeasant"
+Issues   = "https://github.com/alexgc96/taskpeasant/issues"
+
+[tool.setuptools.packages.find]
+include = ["taskpeasant*"]
+exclude = ["tests*", "docs*"]

@@ -382,6 +382,7 @@ def _cmd_info(yaml_path: str, uuid_prefix: str) -> str:
         row("Project",     t.project),
         row("Priority",    t.priority),
         row("Tags",        " ".join(f"+{tg}" for tg in t.tags)),
+        row("Virtual tags", " ".join(f"+{v}" for v in sorted(t.virtual_tags))),
         row("Due",         t.due[:10] if t.due else ""),
         row("Scheduled",   t.scheduled[:10] if t.scheduled else ""),
         row("Depends",     ", ".join(t.depends)),

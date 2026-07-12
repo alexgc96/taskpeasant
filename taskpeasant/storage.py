@@ -151,7 +151,12 @@ def assign_ids(yaml_path: str, tasks: List[Task]) -> None:
     list + immediate action (task 3 done) resolves the same ID twice
     without re-sorting.
     """
+    from ._vtags import annotate_virtual_tags
     from .urgency import compute_urgency
+
+    # Virtual tags need the whole graph and must be present on cache hits
+    # too, so annotate before the mtime-cache check.
+    annotate_virtual_tags(tasks)
 
     try:
         mtime = os.path.getmtime(yaml_path)

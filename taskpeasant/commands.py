@@ -23,10 +23,19 @@ from typing import Optional
 from .task_model import Task
 from .storage import read_tasks, write_tasks, assign_ids
 from .query import apply_filter
+from ._vtags import VIRTUAL_TAG_NAMES
 
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _reserved_tag(tags) -> Optional[str]:
+    """Return the first tag that collides with a virtual tag name, if any."""
+    for tag in (tags or []):
+        if tag in VIRTUAL_TAG_NAMES:
+            return tag
+    return None
 
 
 def _find_one(tasks: list[Task], uuid_prefix: str) -> Optional[Task]:
@@ -41,6 +50,9 @@ def cmd_add(yaml_path: str, description: str, tags: list = None,
             due: str = "", scheduled: str = "", wait: str = "",
             project: str = "", priority: str = "") -> str:
     """Create a new task. Returns a confirmation string."""
+    reserved = _reserved_tag(tags)
+    if reserved:
+        return f"Error: '+{reserved}' is a virtual tag and cannot be added."
     tasks    = read_tasks(yaml_path)
     new_uuid = str(_uuid_mod.uuid4())
     t = Task(
@@ -143,6 +155,10 @@ def cmd_modify(yaml_path: str, uuid_prefix: str, mods: dict) -> str:
     mods dict may contain: description, due, scheduled, status,
     tags_add (list), tags_remove (list), depends (list), and any UDA key.
     """
+    reserved = _reserved_tag(mods.get("tags_add"))
+    if reserved:
+        return f"Error: '+{reserved}' is a virtual tag and cannot be added."
+
     tasks = read_tasks(yaml_path)
     t     = _find_one(tasks, uuid_prefix)
     if not t:

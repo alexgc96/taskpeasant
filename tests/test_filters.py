@@ -123,6 +123,22 @@ def test_retokenize():
     assert _retokenize(["((x))"]) == ["(", "(", "x", ")", ")"]
     # mid-token parens survive
     assert _retokenize(["desc(with)parens"]) == ["desc(with)parens"]
+    # whole shell-quoted expression re-splits
+    assert _retokenize(["(+a or +b)"]) == ["(", "+a", "or", "+b", ")"]
+    # ...but a quoted multi-word literal (no parens) stays atomic
+    assert _retokenize(["waiting or blocked"]) == ["waiting or blocked"]
+
+
+def test_shell_quoted_expression_single_token(trio):
+    got = names(apply_filter(trio, ["(+urgent or project:film)"]))
+    assert got == {"urgent-film", "calm-film", "urgent-web"}
+
+
+def test_quoted_multiword_literal_is_description_search(make_task):
+    a = make_task(description="this is waiting or blocked on review")
+    b = make_task(description="or")
+    got = names(apply_filter([a, b], ["waiting or blocked"]))
+    assert got == {"this is waiting or blocked on review"}
 
 
 # ── Errors ───────────────────────────────────────────────────────────────────

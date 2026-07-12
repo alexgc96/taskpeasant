@@ -3,16 +3,23 @@
 TaskPeasant ships a Python module entry point:
 
 ```bash
-python3 -m taskpeasant [--file FILE] [command tokens…]
+python3 -m taskpeasant [--file FILE] [--yes] [command tokens…]
 # short alias once installed via pip/pipx:
-tp [--file FILE] [command tokens…]
+tp [--file FILE] [--yes] [command tokens…]
 ```
 
-**Default file:** `./tasks.yaml` or the `TASKPEASANT_FILE` environment variable.
+**Default file** — resolved in this order:
+
+1. `--file` / `-f` flag
+2. `TASKPEASANT_FILE` environment variable
+3. `data.location` from the [config file](#config-file)
+4. `./tasks.yaml`
 
 ```bash
 export TASKPEASANT_FILE=~/tasks/work.yaml   # set once, use everywhere
 ```
+
+`--yes` / `-y` skips the interactive confirmation on bulk operations.
 
 All examples below omit `--file` for brevity.
 
@@ -102,6 +109,58 @@ tp task 3 modify +urgent -someday project:studio
 tp task 3 modify description:updated description text
 ```
 
+**Clearing fields** — an empty value removes the field (TW convention):
+
+```bash
+tp task 3 modify due:            # remove the due date
+tp task 3 modify wait:           # release a waiting task back to pending
+tp task 3 modify project: priority:
+tp task 3 modify my_uda:         # delete the UDA entirely
+```
+
+A blank `description:` is rejected.
+
+**Dependencies** — `depends:` takes a comma-separated list of integer IDs
+or UUID prefixes; prefix an item with `-` to remove it, or pass an empty
+value to clear all:
+
+```bash
+tp task 1 modify depends:2          # task 1 now depends on task 2
+tp task 1 modify depends:8c2f,5     # add two dependencies
+tp task 1 modify depends:-2         # remove one
+tp task 1 modify depends:           # clear all
+```
+
+Self-dependencies and circular chains are rejected. Dependencies feed the
+`+BLOCKED` / `+BLOCKING` virtual tags and the urgency graph factors.
+
+### Bulk operations
+
+Any [filter expression](#filter-syntax) may precede a mutation verb
+(`done`, `delete`, `start`, `stop`, `modify`, `annotate`) to apply it to
+every match:
+
+```bash
+tp task +urgent done
+tp task project:film delete
+tp task "(+OVERDUE or +TODAY)" modify priority:H
+tp task project:studio annotate sprint slipped a week
+```
+
+Rules:
+
+- A bare verb with **no filter** (`tp task done`) is a description search,
+  never a filterless bulk operation.
+- Filter tokens the engine cannot evaluate **abort** the operation rather
+  than silently matching everything.
+- Already-completed / already-deleted / already-active tasks are skipped
+  and counted, never errors.
+- The `tp` CLI asks for confirmation when more than one task would be
+  touched; pass `--yes` to skip (the programmatic `execute_command` path
+  applies without prompting and reports what changed).
+- Integer-ID and UUID-prefix commands (`tp task 3 done`) keep their
+  single-target behaviour.
+
 ### info
 
 ```
@@ -189,11 +248,25 @@ tp task status:pending export | python3 -c "import sys,json; [print(t['descripti
 
 ## Filter syntax
 
-Filters can be combined — all tokens are AND'd together.
+Plain token lists are AND'd together. Full boolean expressions are also
+supported with `and`, `or`, `xor`, `not` (case-insensitive) and
+parenthesised groups:
+
+```bash
+tp task "+urgent or +next"
+tp task "(project:film or project:web) and not +BLOCKED"
+tp task "+TAGGED xor +ANNOTATED"
+```
+
+Precedence: `not` > `and` (explicit or juxtaposition) > `xor` > `or`,
+left-associative. Because `and`/`or`/`xor`/`not` are operators, quote a
+filter if you need to search for those words literally in a description
+(e.g. `tp task "fix or-gate"` — any token containing more than the bare
+keyword is a normal search word).
 
 | Token | Matches |
 |---|---|
-| `+tag` | task has this tag |
+| `+tag` | task has this tag (real **or virtual**) |
 | `-tag` | task does NOT have this tag |
 | `status:pending` | pending (also matches waiting, mirrors TW) |
 | `status:completed` | completed only |
@@ -208,6 +281,8 @@ Filters can be combined — all tokens are AND'd together.
 | `scheduled.before/after:<date>` | same for scheduled |
 | `wait.before/after:<date>` | same for wait |
 | `project.any:` / `project.none:` | project field presence |
+| `tag.any:a,b` / `tag.none:a,b` | has any of / none of these tags (empty value = has any / no tags) |
+| `description.contains:<text>` | description substring (alias: `description.has:`) |
 | bare word | description contains this word (case-insensitive) |
 
 ```bash
@@ -215,7 +290,36 @@ tp task +urgent due.before:+7d
 tp task project:studio priority:H
 tp task render                      # description contains "render"
 tp task count due.none: status:pending
+tp task tag.any:render,edit
 ```
+
+### Virtual tags
+
+Uppercase tags are **virtual** — computed at read time from task state,
+never stored, and usable anywhere a `+tag`/`-tag` filter is:
+
+| Tag | Applies when |
+|---|---|
+| `+PENDING` / `+COMPLETED` / `+DELETED` / `+WAITING` | task status |
+| `+ACTIVE` | `start` is set (pending tasks) |
+| `+OVERDUE` | due date is in the past |
+| `+TODAY` | due today |
+| `+DUE` | due within 7 days (includes overdue) |
+| `+SCHEDULED` | has a scheduled date |
+| `+TAGGED` | has at least one real tag |
+| `+ANNOTATED` | has annotations |
+| `+PROJECT` | has a project |
+| `+BLOCKED` | depends on at least one open task |
+| `+BLOCKING` | at least one open task depends on it |
+
+```bash
+tp task +OVERDUE                    # everything past due
+tp task "+DUE and not +BLOCKED"     # actionable soon
+tp task +OVERDUE done               # bulk-complete the backlog
+```
+
+Real tags may not reuse virtual names (`tp task 3 modify +OVERDUE` is
+rejected).
 
 ---
 
@@ -225,12 +329,16 @@ All date fields accept the following values:
 
 | Value | Resolves to |
 |---|---|
+| `now` | current timestamp |
 | `today` | today at midnight UTC |
 | `tomorrow` | tomorrow |
 | `yesterday` | yesterday |
-| `eow` | end of current week (Sunday) |
-| `eom` | end of current month |
-| `monday` … `friday` | next occurrence of that weekday |
+| `sow` / `eow` | start (Monday) / end (Sunday) of current week |
+| `eoww` | end of work week (Friday) |
+| `som` / `eom` | first / last day of current month |
+| `soy` / `eoy` | first / last day of current year |
+| `monday` … `sunday` (or `mon` … `sun`) | next occurrence of that weekday |
+| `someday` / `later` | ~9 years out |
 | `+3d` | 3 days from today |
 | `+2w` | 2 weeks from today |
 | `+1m` | 1 month from today |
@@ -240,11 +348,37 @@ All date fields accept the following values:
 
 ---
 
+## Config file
+
+The `tp` CLI (and only the CLI — the Python library never reads it) loads
+an optional YAML config, the first of:
+
+1. `$TASKPEASANT_CONFIG` (explicit path)
+2. `$XDG_CONFIG_HOME/taskpeasant/config.yaml` (`$XDG_CONFIG_HOME` defaults to `~/.config`)
+3. `~/.taskpeasantrc`
+
+```yaml
+data:
+  location: ~/tasks/work.yaml    # default YAML file (~ expanded)
+default:
+  project: film                  # applied to `add` when no project: given
+urgency:                         # any UrgencyConfig field name
+  blocking: 2.0
+  priority: {H: 7.0, M: 4.0, L: 2.0}
+```
+
+Missing files and malformed YAML never break the CLI — bad content warns
+to stderr and falls back to defaults. Unknown `urgency.*` keys warn and
+are ignored.
+
+---
+
 ## Environment variables
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `TASKPEASANT_FILE` | `./tasks.yaml` | Default YAML file when `--file` is omitted |
+| `TASKPEASANT_CONFIG` | _(unset)_ | Explicit config file path (beats the XDG search) |
 
 ---
 

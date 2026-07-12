@@ -54,6 +54,13 @@ def _retokenize(tokens: list) -> list:
         if tok in ("(", ")"):
             out.append(tok)
             continue
+        # A whole expression may arrive as one shell-quoted argv token:
+        # '(+urgent or +next)'.  Re-split it — but only when parens are
+        # present, so a quoted multi-word description search like
+        # 'waiting or blocked' stays a single literal token.
+        if ("(" in tok or ")" in tok) and len(tok.split()) > 1:
+            out.extend(_retokenize(tok.split()))
+            continue
         lead = 0
         while lead < len(tok) and tok[lead] == "(":
             lead += 1

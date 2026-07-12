@@ -50,6 +50,24 @@ _UUID_RE    = re.compile(r'^[0-9a-f]{4,}(-[0-9a-f]{4}){0,3}', re.IGNORECASE)
 _DATE_KEYS  = frozenset(["due", "scheduled", "wait", "until"])
 _FIELD_KEYS = frozenset(["description", "status", "depends", "priority", "project"])
 
+# Verbs that may follow a filter expression: `task +urgent done`
+_MUTATION_VERBS = frozenset(["done", "delete", "start", "stop",
+                             "modify", "annotate"])
+
+
+def _split_bulk(tokens: list):
+    """Split `<filter...> <verb> <rest...>` at the first mutation verb.
+
+    The verb must be an exact lowercase token at index >= 1 — a leading
+    verb (`task done`) stays a description search, which guards against
+    an accidental filterless "complete everything".  Returns
+    (filter_tokens, verb, rest) or None.
+    """
+    for i, tok in enumerate(tokens):
+        if i >= 1 and tok in _MUTATION_VERBS:
+            return tokens[:i], tok, tokens[i + 1:]
+    return None
+
 
 def _is_uuid(tok: str) -> bool:
     return bool(_UUID_RE.match(tok))
@@ -88,11 +106,14 @@ def _parse_mod_tokens(tokens: list) -> dict:
             key, _, val = tok.partition(":")
             key = key.lower()
             if key in _DATE_KEYS:
-                resolved = _resolve_date_alias(val)
-                if resolved == _INVALID_DATE:
-                    mods["__date_error__"] = val
+                if val == "":
+                    mods[key] = ""          # empty value clears the field (TW)
                 else:
-                    mods[key] = resolved
+                    resolved = _resolve_date_alias(val)
+                    if resolved == _INVALID_DATE:
+                        mods["__date_error__"] = val
+                    else:
+                        mods[key] = resolved
             elif key in _FIELD_KEYS:
                 # description:some text (rest of value after colon)
                 mods[key] = val
@@ -120,6 +141,15 @@ def execute_command(raw: str, yaml_path: str) -> str:
     yaml_path must be the absolute path to a YAML file that TaskPeasant
     is allowed to read and write (it edits the `taskpeasant_tasks:` key).
     """
+    # Contract: this function returns a string and never raises
+    # (docs/BACKWARDS_COMPAT.md §5), so trap everything.
+    try:
+        return _execute_command(raw, yaml_path)
+    except Exception as e:
+        return f"Error: {e}"
+
+
+def _execute_command(raw: str, yaml_path: str) -> str:
     try:
         tokens = shlex.split(raw)
     except ValueError as e:
@@ -219,6 +249,24 @@ def execute_command(raw: str, yaml_path: str) -> str:
         # Fallthrough: treat whole thing as a filter + list
         return _cmd_list(yaml_path, tokens)
 
+    # ── Bulk: `<filter...> <verb>` — any filter may precede a mutation verb ──
+    bulk = _split_bulk(tokens)
+    if bulk:
+        filter_tokens, verb, rest = bulk
+        if verb in ("done", "delete", "start", "stop") and rest:
+            return f"Error: unexpected arguments after '{verb}'"
+        if verb == "annotate":
+            note = " ".join(rest)
+            if not note:
+                return "Error: annotation text required"
+            return commands.cmd_bulk(yaml_path, filter_tokens, verb, note=note)
+        if verb == "modify":
+            mods = _parse_mod_tokens(rest)
+            if not mods:
+                return "Nothing to modify."
+            return commands.cmd_bulk(yaml_path, filter_tokens, verb, mods=mods)
+        return commands.cmd_bulk(yaml_path, filter_tokens, verb)
+
     # ── 'export' or implicit list with filter tokens ──────────────────────────
     filter_tokens = [t for t in tokens if t != "export"]
     if "export" in tokens:
@@ -270,7 +318,7 @@ def _cmd_next(yaml_path: str, filter_tokens: list) -> str:
     pending = [t for t in tasks if t.status == "pending"]
     if filter_tokens:
         from .query import apply_filter
-        pending = apply_filter(pending, filter_tokens)
+        pending = apply_filter(pending, filter_tokens, all_tasks=tasks)
     if not pending:
         return "No pending tasks."
     for t in pending:
@@ -382,6 +430,7 @@ def _cmd_info(yaml_path: str, uuid_prefix: str) -> str:
         row("Project",     t.project),
         row("Priority",    t.priority),
         row("Tags",        " ".join(f"+{tg}" for tg in t.tags)),
+        row("Virtual tags", " ".join(f"+{v}" for v in sorted(t.virtual_tags))),
         row("Due",         t.due[:10] if t.due else ""),
         row("Scheduled",   t.scheduled[:10] if t.scheduled else ""),
         row("Depends",     ", ".join(t.depends)),

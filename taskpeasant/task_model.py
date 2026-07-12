@@ -106,6 +106,7 @@ class Task:
     # Computed at runtime — never persisted
     urgency_value: float = field(default=0.0, repr=False)
     id:            int   = field(default=0,   repr=False)
+    virtual_tags:  set   = field(default_factory=set, repr=False, compare=False)
 
     # ── Serialisation ──────────────────────────────────────────────────────
 

@@ -143,26 +143,36 @@ def write_tasks(yaml_path: str, tasks: List[Task]) -> None:
         )
 
 
-def assign_ids(yaml_path: str, tasks: List[Task]) -> None:
+def assign_ids(yaml_path: str, tasks: List[Task], config=None) -> None:
     """
     Assign ephemeral integer IDs to pending/waiting tasks in-place.
     IDs are 1-based, sorted by urgency descending (mirrors Taskwarrior).
     Completed/deleted tasks get id=0.  Results are mtime-cached so a
     list + immediate action (task 3 done) resolves the same ID twice
     without re-sorting.
+
+    config: optional UrgencyConfig forwarded to compute_urgency.  The
+    cache key includes it so callers with different configs never see
+    each other's ordering.
     """
+    from ._vtags import annotate_virtual_tags
     from .urgency import compute_urgency
+
+    # Virtual tags need the whole graph and must be present on cache hits
+    # too, so annotate before the mtime-cache check.
+    annotate_virtual_tags(tasks)
 
     try:
         mtime = os.path.getmtime(yaml_path)
     except OSError:
         mtime = 0.0
 
-    key = (yaml_path, mtime)
+    # repr-keyed because UrgencyConfig holds an unhashable dict field
+    key = (yaml_path, mtime, repr(config) if config is not None else None)
     if key not in _id_cache:
         active = [t for t in tasks if t.status in ("pending", "waiting")]
         for t in active:
-            t.urgency_value = compute_urgency(t)
+            t.urgency_value = compute_urgency(t, config)
         active.sort(key=lambda t: -t.urgency_value)
         _id_cache[key] = [(i + 1, t.uuid) for i, t in enumerate(active)]
 

@@ -1,6 +1,6 @@
 # TaskWarrior Parity Matrix
 
-> Status as of TaskPeasant **0.2.0**.
+> Status as of TaskPeasant **0.3.0**.
 > ✓ = fully supported · ~ = partial / different implementation · ✗ = not supported
 
 ---
@@ -20,7 +20,8 @@
 | `wait` | ✓ | ✓ | Auto-transitions `waiting→pending` at read time |
 | `modified` | ✓ | ✓ | Updated on every mutation |
 | `tags` | ✓ | ✓ | List; `+tag`/`-tag` syntax |
-| `depends` | ✓ | ✓ | List of UUID strings; comma-string on TW wire export |
+| `depends` | ✓ | ✓ | List of UUID strings; comma-string on TW wire export. `modify depends:2,-3` resolves IDs/prefixes, rejects cycles |
+| virtual tags | ✓ | ✓ | `+PENDING/+COMPLETED/+DELETED/+WAITING/+ACTIVE/+OVERDUE/+TODAY/+DUE/+SCHEDULED/+TAGGED/+ANNOTATED/+PROJECT/+BLOCKED/+BLOCKING` — computed at read time, filterable, never persisted |
 | `annotations` | ✓ | ✓ | `[{entry, description}]` |
 | `project` | ✓ | ✓ | String; `project:name` syntax |
 | `priority` | ✓ | ✓ | `H`, `M`, `L`; affects urgency |
@@ -38,6 +39,7 @@
 |---|---|---|---|
 | `task add` | ✓ | ✓ | |
 | `task <id> done` | ✓ | ✓ | Accepts integer ID or UUID prefix |
+| `task <filter> <verb>` (bulk) | ✓ | ✓ | Any filter before done/delete/start/stop/modify/annotate; bare verb stays a search (no filterless bulk) |
 | `task <id> delete` | ✓ | ✓ | |
 | `task <id> start` | ✓ | ✓ | |
 | `task <id> stop` | ✓ | ✓ | |
@@ -77,10 +79,11 @@
 | `wait.before/after:` | ✓ | ✓ | |
 | `project.any:` / `project.none:` | ✓ | ✓ | |
 | bare word | ✓ | ✓ | Case-insensitive description substring |
-| `AND` / `OR` / `NOT` operators | ✓ | ✗ | All tokens are AND'd |
-| Parenthesised expressions | ✓ | ✗ | |
-| `description.contains:` | ✓ | ~ | Bare word does the same thing |
-| `tag.any:` / `tag.none:` | ✓ | ✗ | Use `+tag` / `-tag` |
+| `and` / `or` / `xor` / `not` operators | ✓ | ✓ | Precedence: `not` > `and` > `xor` > `or`; implicit AND for plain lists |
+| Parenthesised expressions | ✓ | ✓ | `( … )` groups; parens may be glued to tokens |
+| `description.contains:` | ✓ | ✓ | Also `description.has:`; bare word does the same thing |
+| `tag.any:` / `tag.none:` | ✓ | ✓ | Comma-separated any-of / none-of; empty value = has any / no tags |
+| Virtual tags in filters | ✓ | ✓ | `+OVERDUE`, `-BLOCKED`, etc. |
 
 ---
 
@@ -95,9 +98,11 @@
 | `eom` (end of month) | ✓ | ✓ |
 | Weekday names (`monday` etc.) | ✓ | ✓ |
 | `+Nd` / `+Nw` / `+Nm` / `+Ny` | ✓ | ✓ |
-| `eoy` (end of year) | ✓ | ✗ |
-| `som` / `sow` (start of …) | ✓ | ✗ |
-| `now` | ✓ | ✗ |
+| `eoy` / `soy` (year boundaries) | ✓ | ✓ |
+| `som` / `sow` (start of …) | ✓ | ✓ |
+| `eoww` (end of work week) | ✓ | ✓ |
+| `now` | ✓ | ✓ |
+| `someday` / `later` | ✓ | ✓ |
 
 ---
 
@@ -117,13 +122,16 @@
 | Tag `+urgent` | 6.0 | 6.0 |
 | Annotations | 0.5 each (max 2.0) | 0.5 each (max 2.0) |
 | Age | 0.01/day (max 2.0) | 0.01/day (max 2.0) |
-| Blocked (has `depends`) | −5.0 | −5.0 |
+| Blocked (unresolved open `depends`) | −5.0 | −5.0 |
+| Blocking (other open tasks depend on it) | 1.0 | 1.0 |
 
 TW uses a polynomial; TaskPeasant uses a transparent additive model. Output range is equivalent (~0–20) so UI urgency bars need no changes.
 
-**Roadmap:** v0.3.0 introduces `UrgencyConfig` — a dataclass that replaces the
-hardcoded `WEIGHTS` dict and makes all coefficients configurable per-caller.
-This is the seam through which a full TW polynomial evaluator can be plugged in later.
+All coefficients are configurable per caller via the `UrgencyConfig`
+dataclass (`compute_urgency(task, config=…)`) or via the `urgency:` section
+of the CLI config file. The legacy `WEIGHTS` dict is still honoured when no
+config is passed. `UrgencyConfig` is also the seam through which a full TW
+polynomial evaluator can be plugged in later.
 
 ---
 
@@ -133,7 +141,9 @@ This is the seam through which a full TW polynomial evaluator can be plugged in 
 |---|---|
 | Recurring tasks | Engine complexity; host app can replicate with UDAs + cron |
 | Sync / conflict resolution | Intentionally local-first and filesystem-backed |
-| Configuration file | Planned for v0.3.0 — `UrgencyConfig` dataclass + `~/.config/taskpeasant/config.yaml` |
 | Colour rules | Host UI owns rendering |
 | Report definitions | Host exports flat JSON and renders its own views |
 | Daemon / server | Pure library — host app owns the HTTP layer |
+
+(The configuration file and `UrgencyConfig`, listed as gaps in 0.2.0,
+shipped in 0.3.0.)

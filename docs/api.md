@@ -37,7 +37,13 @@ class Task:
     # Runtime only — never persisted
     urgency_value: float      = 0.0
     id:            int        = 0             # ephemeral integer ID
+    virtual_tags:  set        = set()         # +OVERDUE, +BLOCKED, … (see _vtags)
 ```
+
+`virtual_tags` is populated by `assign_ids()` (or
+`taskpeasant._vtags.annotate_virtual_tags(tasks)` directly) and consumed by
+filters (`+OVERDUE`), urgency graph factors, and info views. It never
+appears in `to_dict()` / `to_tw_export()` output.
 
 #### `Task.to_dict() → dict`
 
@@ -81,11 +87,14 @@ tasks[0].description = "updated"
 tp.write_tasks("project.yaml", tasks)
 ```
 
-### `assign_ids(yaml_path: str, tasks: list[Task]) → None`
+### `assign_ids(yaml_path: str, tasks: list[Task], config=None) → None`
 
 Assign ephemeral integer IDs to `pending`/`waiting` tasks in-place, sorted
 by urgency descending. Results are mtime-cached — repeated calls within the
-same file state are free. Completed/deleted tasks get `id = 0`.
+same file state are free. Completed/deleted tasks get `id = 0`. Also
+annotates `virtual_tags` on every task. `config` is an optional
+`UrgencyConfig` forwarded to `compute_urgency` (the ID cache is keyed per
+config).
 
 ```python
 tasks = tp.read_tasks("project.yaml")
@@ -169,10 +178,13 @@ Update fields on a task. `mods` may contain:
 | `status` | str | Set status directly |
 | `project` | str | Set project |
 | `priority` | str | Set priority (`H`/`M`/`L`) |
-| `tags_add` | list | Add tags |
+| `tags_add` | list | Add tags (virtual tag names are rejected) |
 | `tags_remove` | list | Remove tags |
-| `depends` | list | Replace depends list |
-| _(any other key)_ | any | Stored as UDA |
+| `depends` | list \| str | List → replace verbatim. String → resolved spec: `"2,8c2f"` adds (IDs/prefixes → full UUIDs), `"-3"` removes, `""` clears; self-deps and cycles rejected |
+| _(any other key)_ | any | Stored as UDA (empty string value deletes the UDA) |
+
+Empty string values clear fields (`due`/`scheduled`/`wait`/`project`/
+`priority`); clearing `wait` releases a `waiting` task back to `pending`.
 
 ```python
 tp.cmd_modify("project.yaml", "8c2f1a3b", {
@@ -188,22 +200,46 @@ tp.cmd_modify("project.yaml", "8c2f1a3b", {
 cmd_export(
     yaml_path:     str,
     filter_tokens: list = None,
+    config:        UrgencyConfig = None,
 ) → list[dict]
 ```
 
 Returns TW-wire-format dicts, ready for `json.dumps`. Includes `id`,
-`urgency`, `is_active`. Pass `filter_tokens` to restrict results.
+`urgency`, `is_active`. Pass `filter_tokens` to restrict results (full
+boolean expression syntax supported) and `config` to score with a custom
+`UrgencyConfig`.
 
 ```python
 data = tp.cmd_export("project.yaml", filter_tokens=["status:pending"])
 data.sort(key=lambda t: -t["urgency"])
 ```
 
+### `cmd_bulk`
+
+```python
+cmd_bulk(
+    yaml_path:     str,
+    filter_tokens: list,
+    verb:          str,          # done|delete|start|stop|modify|annotate
+    mods:          dict = None,  # for verb="modify"
+    note:          str  = "",    # for verb="annotate"
+) → str
+```
+
+Apply a mutation verb to every task matching a filter expression. One
+read, one write. Inapplicable tasks are skipped and counted; unusable
+filter tokens or mod errors abort before anything is written.
+
+```python
+tp.cmd_bulk("project.yaml", ["+OVERDUE"], "done")
+tp.cmd_bulk("project.yaml", ["project:film"], "modify", mods={"priority": "H"})
+```
+
 ---
 
 ## Scoring
 
-### `compute_urgency(task: Task) → float`
+### `compute_urgency(task: Task, config: UrgencyConfig = None) → float`
 
 Returns an urgency score in the ~0–20 range, compatible with Taskwarrior's
 urgency display. Returns `0.0` for non-pending tasks.
@@ -214,14 +250,36 @@ for t in tasks:
     print(t.description, tp.compute_urgency(t))
 ```
 
-The scoring factors and weights are exposed in `taskpeasant.urgency.WEIGHTS`
-and can be tuned by the host application.
+### `UrgencyConfig` / `DEFAULT_CONFIG`
 
-> **Roadmap (v0.3.0):** `compute_urgency` will gain a second parameter,
-> `config: UrgencyConfig = DEFAULT_CONFIG`. Callers that omit it get identical
-> behaviour. The `UrgencyConfig` dataclass will also accept a custom polynomial
-> evaluator, enabling full Taskwarrior-style urgency as a drop-in.
-> `WEIGHTS` will be deprecated in favour of `DEFAULT_CONFIG`.
+Frozen dataclass holding every urgency coefficient:
+
+```python
+from taskpeasant import UrgencyConfig, compute_urgency
+
+cfg = UrgencyConfig(blocking=3.0, priority={"H": 8.0, "M": 4.0, "L": 2.0})
+score = compute_urgency(task, cfg)
+```
+
+Fields: `active`, `overdue`, `due_today`, `due_soon`, `scheduled`,
+`priority` (dict), `tag_urgent`, `tag_next`, `annotations`,
+`annotations_cap`, `age_per_day`, `age_cap`, `blocked`, `blocking`.
+`UrgencyConfig.from_weights(d)` builds one from a `WEIGHTS`-style dict.
+
+The `blocked` penalty and `blocking` bonus are graph-aware when tasks have
+been annotated with virtual tags (via `assign_ids`); on bare, un-annotated
+tasks, `blocked` falls back to a `depends`-presence check and no blocking
+bonus applies.
+
+**Legacy knob:** when `config` is omitted, the config is rebuilt from the
+live `taskpeasant.urgency.WEIGHTS` dict on every call, so existing hosts
+that tune by mutating `WEIGHTS` keep working unchanged. `WEIGHTS` is
+deprecated in favour of passing an `UrgencyConfig` explicitly.
+
+> The design note in earlier docs sketched `config: UrgencyConfig =
+> DEFAULT_CONFIG`; the shipped default is `None` precisely so that live
+> `WEIGHTS` mutations stay honoured. A custom polynomial evaluator hook
+> remains future work.
 
 ---
 
@@ -231,7 +289,16 @@ and can be tuned by the host application.
 
 Parse a Taskwarrior-style CLI string and dispatch to the correct command.
 Returns terminal output as a plain string. Never raises — all errors are
-returned as strings.
+returned as strings. Supports boolean filter expressions, virtual tags,
+and bulk operations (`task +urgent done`); see [docs/cli.md](cli.md).
+
+### `apply_filter(tasks, tokens, *, all_tasks=None) → list[Task]`
+
+(from `taskpeasant.query`) Filter a task list by TW-style tokens,
+including boolean expressions. Annotates virtual tags first; pass the
+full list as `all_tasks` when `tasks` is a pre-narrowed subset so
+`+BLOCKED`/`+BLOCKING` see the whole dependency graph. Raises
+`taskpeasant.query.FilterError` on malformed expressions.
 
 ```python
 output = tp.execute_command("task add render the shot +urgent due:tomorrow", yaml_path)
@@ -252,5 +319,5 @@ output = tp.execute_command("task 1 done", yaml_path)
 
 ```python
 import taskpeasant
-print(taskpeasant.__version__)   # "0.2.0"
+print(taskpeasant.__version__)   # "0.3.0"
 ```

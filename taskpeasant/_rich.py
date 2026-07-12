@@ -108,6 +108,7 @@ def render_info(t: Task) -> Panel:
     row("Project",     t.project)
     row("Priority",    t.priority)
     row("Tags",        " ".join(f"+{tg}" for tg in t.tags))
+    row("Virtual",     Text(" ".join(f"+{v}" for v in sorted(t.virtual_tags)), style="dim"))
     row("Due",         Text(t.due[:10] if t.due else "", style=_due_color(t.due)))
     row("Scheduled",   t.scheduled[:10] if t.scheduled else "")
     row("Wait",        t.wait[:10] if t.wait else "")

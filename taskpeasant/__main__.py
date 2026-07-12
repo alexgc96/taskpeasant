@@ -12,14 +12,16 @@ Default YAML file: ./tasks.yaml or $TASKPEASANT_FILE env var.
 
 import argparse
 import os
+import shlex
 import sys
 
 from rich.console import Console
+from rich.prompt import Confirm
 
 from . import _rich as R
 from ._dates import parse_date
-from .peasant_parser import execute_command, _resolve_id, _is_uuid
-from .query import apply_filter
+from .peasant_parser import execute_command, _resolve_id, _is_uuid, _split_bulk
+from .query import FilterError, apply_filter
 from .reports import _build_buckets, cmd_burndown
 from .storage import read_tasks, assign_ids
 from .urgency import compute_urgency
@@ -53,7 +55,7 @@ def _rich_next(yaml_path: str, filter_tokens: list) -> None:
     assign_ids(yaml_path, tasks)
     pending = [t for t in tasks if t.status == "pending"]
     if filter_tokens:
-        pending = apply_filter(pending, filter_tokens)
+        pending = apply_filter(pending, filter_tokens, all_tasks=tasks)
     if not pending:
         console.print("[dim]No pending tasks.[/dim]")
         return
@@ -175,6 +177,17 @@ def _rich_calendar(yaml_path: str) -> None:
 
 
 def main() -> None:
+    try:
+        _main()
+    except FilterError as e:
+        console.print(R.error(f"Filter error: {e}"))
+
+
+def _main() -> None:
+    # Config file is a CLI-only concern — the library path never reads it.
+    from ._config import load_cli_config
+    cfg = load_cli_config()
+
     parser = argparse.ArgumentParser(
         prog="tp",
         description="TaskPeasant — YAML-native task backend",
@@ -182,15 +195,30 @@ def main() -> None:
     )
     parser.add_argument(
         "--file", "-f",
-        default=os.environ.get("TASKPEASANT_FILE", "tasks.yaml"),
+        default=None,
         metavar="FILE",
-        help="YAML file to use (default: ./tasks.yaml or $TASKPEASANT_FILE)",
+        help="YAML file to use (default: ./tasks.yaml, $TASKPEASANT_FILE, "
+             "or data.location from the config file)",
+    )
+    parser.add_argument(
+        "--yes", "-y", action="store_true",
+        help="skip confirmation prompts (bulk operations)",
     )
     parser.add_argument("command", nargs="*", help="task command tokens")
     args = parser.parse_args()
 
     tokens = args.command or []
-    yaml_path = args.file
+    # Precedence: --file > $TASKPEASANT_FILE > config data.location > default
+    yaml_path = (args.file
+                 or os.environ.get("TASKPEASANT_FILE", "")
+                 or cfg.data_location
+                 or "tasks.yaml")
+
+    # Urgency overrides go into the live WEIGHTS dict — the one knob the
+    # frozen execute_command path (which mutations delegate to) can see.
+    if cfg.urgency_overrides:
+        from .urgency import WEIGHTS
+        WEIGHTS.update(cfg.urgency_overrides)
 
     # Strip leading 'task' keyword
     if tokens and tokens[0].lower() == "task":
@@ -261,10 +289,30 @@ def main() -> None:
                                  "annotate", "modify", "export", "count"])
     second = tokens[1].lower() if len(tokens) > 1 else ""
 
-    if first == "add" or (second in mutation_verbs) or (
+    # Bulk detection: a filter expression followed by a mutation verb.
+    # Digit/UUID-first commands stay on the single-target path.
+    bulk = None
+    if first != "add" and not first.isdigit() and not _is_uuid(resolved_first):
+        bulk = _split_bulk(tokens)
+
+    # Config default project: only for `add`, only when none was given
+    if (first == "add" and cfg.default_project
+            and not any(t.startswith("project:") for t in tokens)):
+        tokens = tokens + [f"project:{cfg.default_project}"]
+
+    if first == "add" or bulk or (second in mutation_verbs) or (
             _is_uuid(resolved_first) and second in mutation_verbs):
+        if bulk and not args.yes and sys.stdin.isatty():
+            filter_tokens, verb, _rest = bulk
+            tasks = read_tasks(yaml_path)
+            assign_ids(yaml_path, tasks)
+            count = len(apply_filter(tasks, filter_tokens))
+            if count > 1 and not Confirm.ask(
+                    f"This will {verb} {count} tasks. Proceed?"):
+                console.print("[dim]Aborted.[/dim]")
+                return
         # Mutation path — run through execute_command, pretty-print result
-        raw = "task " + " ".join(tokens)
+        raw = "task " + " ".join(shlex.quote(t) for t in tokens)
         result = execute_command(raw, yaml_path)
         if result.startswith("Error") or result.startswith("No task") or result.startswith("Parse"):
             console.print(R.error(result))

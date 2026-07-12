@@ -221,6 +221,7 @@ class _Parser:
     def __init__(self, tokens: list):
         self.tokens = tokens
         self.pos = 0
+        self.unknown: list = []   # tokens that compiled to no predicate
 
     def peek(self) -> Optional[str]:
         return self.tokens[self.pos] if self.pos < len(self.tokens) else None
@@ -293,7 +294,10 @@ class _Parser:
         self.next()
         fn = _compile_leaf(tok.strip())
         if fn is None:
-            return _True()   # unusable token — keep permissive pre-0.3 behavior
+            # Unusable token — keep permissive pre-0.3 list behavior, but
+            # record it so destructive callers (bulk) can refuse to act.
+            self.unknown.append(tok)
+            return _True()
         return _Pred(fn)
 
 
@@ -309,12 +313,15 @@ class Filter:
 
     def __init__(self):
         self._root = _True()
+        self.unknown_tokens: list = []
 
     @classmethod
     def parse(cls, tokens: list) -> "Filter":
         f = cls()
         clean = [t.strip() for t in tokens if t and t.strip()]
-        f._root = _Parser(_retokenize(clean)).parse()
+        parser = _Parser(_retokenize(clean))
+        f._root = parser.parse()
+        f.unknown_tokens = parser.unknown
         return f
 
     def matches(self, task: Task) -> bool:

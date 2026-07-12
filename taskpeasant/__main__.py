@@ -12,13 +12,15 @@ Default YAML file: ./tasks.yaml or $TASKPEASANT_FILE env var.
 
 import argparse
 import os
+import shlex
 import sys
 
 from rich.console import Console
+from rich.prompt import Confirm
 
 from . import _rich as R
 from ._dates import parse_date
-from .peasant_parser import execute_command, _resolve_id, _is_uuid
+from .peasant_parser import execute_command, _resolve_id, _is_uuid, _split_bulk
 from .query import FilterError, apply_filter
 from .reports import _build_buckets, cmd_burndown
 from .storage import read_tasks, assign_ids
@@ -193,6 +195,10 @@ def _main() -> None:
         metavar="FILE",
         help="YAML file to use (default: ./tasks.yaml or $TASKPEASANT_FILE)",
     )
+    parser.add_argument(
+        "--yes", "-y", action="store_true",
+        help="skip confirmation prompts (bulk operations)",
+    )
     parser.add_argument("command", nargs="*", help="task command tokens")
     args = parser.parse_args()
 
@@ -268,10 +274,25 @@ def _main() -> None:
                                  "annotate", "modify", "export", "count"])
     second = tokens[1].lower() if len(tokens) > 1 else ""
 
-    if first == "add" or (second in mutation_verbs) or (
+    # Bulk detection: a filter expression followed by a mutation verb.
+    # Digit/UUID-first commands stay on the single-target path.
+    bulk = None
+    if first != "add" and not first.isdigit() and not _is_uuid(resolved_first):
+        bulk = _split_bulk(tokens)
+
+    if first == "add" or bulk or (second in mutation_verbs) or (
             _is_uuid(resolved_first) and second in mutation_verbs):
+        if bulk and not args.yes and sys.stdin.isatty():
+            filter_tokens, verb, _rest = bulk
+            tasks = read_tasks(yaml_path)
+            assign_ids(yaml_path, tasks)
+            count = len(apply_filter(tasks, filter_tokens))
+            if count > 1 and not Confirm.ask(
+                    f"This will {verb} {count} tasks. Proceed?"):
+                console.print("[dim]Aborted.[/dim]")
+                return
         # Mutation path — run through execute_command, pretty-print result
-        raw = "task " + " ".join(tokens)
+        raw = "task " + " ".join(shlex.quote(t) for t in tokens)
         result = execute_command(raw, yaml_path)
         if result.startswith("Error") or result.startswith("No task") or result.startswith("Parse"):
             console.print(R.error(result))

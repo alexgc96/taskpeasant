@@ -50,6 +50,24 @@ _UUID_RE    = re.compile(r'^[0-9a-f]{4,}(-[0-9a-f]{4}){0,3}', re.IGNORECASE)
 _DATE_KEYS  = frozenset(["due", "scheduled", "wait", "until"])
 _FIELD_KEYS = frozenset(["description", "status", "depends", "priority", "project"])
 
+# Verbs that may follow a filter expression: `task +urgent done`
+_MUTATION_VERBS = frozenset(["done", "delete", "start", "stop",
+                             "modify", "annotate"])
+
+
+def _split_bulk(tokens: list):
+    """Split `<filter...> <verb> <rest...>` at the first mutation verb.
+
+    The verb must be an exact lowercase token at index >= 1 — a leading
+    verb (`task done`) stays a description search, which guards against
+    an accidental filterless "complete everything".  Returns
+    (filter_tokens, verb, rest) or None.
+    """
+    for i, tok in enumerate(tokens):
+        if i >= 1 and tok in _MUTATION_VERBS:
+            return tokens[:i], tok, tokens[i + 1:]
+    return None
+
 
 def _is_uuid(tok: str) -> bool:
     return bool(_UUID_RE.match(tok))
@@ -230,6 +248,24 @@ def _execute_command(raw: str, yaml_path: str) -> str:
             return _cmd_info(yaml_path, uuid_prefix)
         # Fallthrough: treat whole thing as a filter + list
         return _cmd_list(yaml_path, tokens)
+
+    # ── Bulk: `<filter...> <verb>` — any filter may precede a mutation verb ──
+    bulk = _split_bulk(tokens)
+    if bulk:
+        filter_tokens, verb, rest = bulk
+        if verb in ("done", "delete", "start", "stop") and rest:
+            return f"Error: unexpected arguments after '{verb}'"
+        if verb == "annotate":
+            note = " ".join(rest)
+            if not note:
+                return "Error: annotation text required"
+            return commands.cmd_bulk(yaml_path, filter_tokens, verb, note=note)
+        if verb == "modify":
+            mods = _parse_mod_tokens(rest)
+            if not mods:
+                return "Nothing to modify."
+            return commands.cmd_bulk(yaml_path, filter_tokens, verb, mods=mods)
+        return commands.cmd_bulk(yaml_path, filter_tokens, verb)
 
     # ── 'export' or implicit list with filter tokens ──────────────────────────
     filter_tokens = [t for t in tokens if t != "export"]

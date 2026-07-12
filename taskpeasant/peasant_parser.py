@@ -120,6 +120,15 @@ def execute_command(raw: str, yaml_path: str) -> str:
     yaml_path must be the absolute path to a YAML file that TaskPeasant
     is allowed to read and write (it edits the `taskpeasant_tasks:` key).
     """
+    # Contract: this function returns a string and never raises
+    # (docs/BACKWARDS_COMPAT.md §5), so trap everything.
+    try:
+        return _execute_command(raw, yaml_path)
+    except Exception as e:
+        return f"Error: {e}"
+
+
+def _execute_command(raw: str, yaml_path: str) -> str:
     try:
         tokens = shlex.split(raw)
     except ValueError as e:
@@ -270,7 +279,7 @@ def _cmd_next(yaml_path: str, filter_tokens: list) -> str:
     pending = [t for t in tasks if t.status == "pending"]
     if filter_tokens:
         from .query import apply_filter
-        pending = apply_filter(pending, filter_tokens)
+        pending = apply_filter(pending, filter_tokens, all_tasks=tasks)
     if not pending:
         return "No pending tasks."
     for t in pending:

@@ -19,7 +19,7 @@ from rich.console import Console
 from . import _rich as R
 from ._dates import parse_date
 from .peasant_parser import execute_command, _resolve_id, _is_uuid
-from .query import apply_filter
+from .query import FilterError, apply_filter
 from .reports import _build_buckets, cmd_burndown
 from .storage import read_tasks, assign_ids
 from .urgency import compute_urgency
@@ -53,7 +53,7 @@ def _rich_next(yaml_path: str, filter_tokens: list) -> None:
     assign_ids(yaml_path, tasks)
     pending = [t for t in tasks if t.status == "pending"]
     if filter_tokens:
-        pending = apply_filter(pending, filter_tokens)
+        pending = apply_filter(pending, filter_tokens, all_tasks=tasks)
     if not pending:
         console.print("[dim]No pending tasks.[/dim]")
         return
@@ -175,6 +175,13 @@ def _rich_calendar(yaml_path: str) -> None:
 
 
 def main() -> None:
+    try:
+        _main()
+    except FilterError as e:
+        console.print(R.error(f"Filter error: {e}"))
+
+
+def _main() -> None:
     parser = argparse.ArgumentParser(
         prog="tp",
         description="TaskPeasant — YAML-native task backend",

@@ -88,11 +88,14 @@ def _parse_mod_tokens(tokens: list) -> dict:
             key, _, val = tok.partition(":")
             key = key.lower()
             if key in _DATE_KEYS:
-                resolved = _resolve_date_alias(val)
-                if resolved == _INVALID_DATE:
-                    mods["__date_error__"] = val
+                if val == "":
+                    mods[key] = ""          # empty value clears the field (TW)
                 else:
-                    mods[key] = resolved
+                    resolved = _resolve_date_alias(val)
+                    if resolved == _INVALID_DATE:
+                        mods["__date_error__"] = val
+                    else:
+                        mods[key] = resolved
             elif key in _FIELD_KEYS:
                 # description:some text (rest of value after colon)
                 mods[key] = val

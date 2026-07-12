@@ -44,6 +44,64 @@ def _find_one(tasks: list[Task], uuid_prefix: str) -> Optional[Task]:
     return matches[0] if len(matches) == 1 else None
 
 
+def _creates_cycle(tasks: list[Task], target: Task, new_dep_uuid: str) -> bool:
+    """Would target→new_dep close a dependency cycle? DFS from new_dep."""
+    by_uuid = {t.uuid: t for t in tasks}
+    stack, seen = [new_dep_uuid], set()
+    while stack:
+        cur = stack.pop()
+        if cur == target.uuid:
+            return True
+        if cur in seen:
+            continue
+        seen.add(cur)
+        node = by_uuid.get(cur)
+        if node:
+            stack.extend(node.depends)
+    return False
+
+
+def _resolve_depends(tasks: list[Task], target: Task, spec: str) -> tuple:
+    """Resolve a depends: value like '2,8c2f,-3' into a full-UUID list.
+
+    Comma-separated items: bare = add, '-'-prefixed = remove, empty spec
+    clears all.  Items may be ephemeral integer IDs (requires assign_ids
+    to have run) or UUID prefixes.  Returns (new_list, "") on success or
+    ([], error_message) — callers must not write on error.
+    """
+    spec = spec.strip()
+    if not spec:
+        return [], ""
+
+    def resolve(ref: str) -> Optional[Task]:
+        if ref.isdigit():
+            int_id = int(ref)
+            return next((t for t in tasks if t.id == int_id), None)
+        return _find_one(tasks, ref)
+
+    new_deps = list(target.depends)
+    for item in spec.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        removing = item.startswith("-")
+        ref = item[1:] if removing else item
+        dep = resolve(ref)
+        if dep is None:
+            return [], f"Error: cannot resolve dependency '{ref}'"
+        if removing:
+            new_deps = [d for d in new_deps if d != dep.uuid]
+            continue
+        if dep.uuid == target.uuid:
+            return [], "Error: a task cannot depend on itself"
+        if _creates_cycle(tasks, target, dep.uuid):
+            return [], (f"Error: depends:{ref} would create a "
+                        "circular dependency")
+        if dep.uuid not in new_deps:
+            new_deps.append(dep.uuid)
+    return new_deps, ""
+
+
 # ── add ───────────────────────────────────────────────────────────────────────
 
 def cmd_add(yaml_path: str, description: str, tags: list = None,
@@ -166,11 +224,16 @@ def cmd_modify(yaml_path: str, uuid_prefix: str, mods: dict) -> str:
 
     for key, val in mods.items():
         if key == "description":
+            if not val.strip():
+                return "Error: description cannot be blank"
             t.description = val
         elif key in ("due", "scheduled", "wait"):
             setattr(t, key, val)
-            if key == "wait" and val:
-                t.status = "waiting"
+            if key == "wait":
+                if val:
+                    t.status = "waiting"
+                elif t.status == "waiting":
+                    t.status = "pending"    # cleared wait releases the task
         elif key == "status":
             if val in ("pending", "completed", "deleted", "waiting"):
                 t.status = val
@@ -188,9 +251,20 @@ def cmd_modify(yaml_path: str, uuid_prefix: str, mods: dict) -> str:
         elif key == "tags_remove":
             t.tags = [tg for tg in t.tags if tg not in (val or [])]
         elif key == "depends":
-            t.depends = val if isinstance(val, list) else [val]
+            if isinstance(val, list):
+                t.depends = val
+            else:
+                assign_ids(yaml_path, tasks)   # int refs need ephemeral IDs
+                new_deps, err = _resolve_depends(tasks, t, val)
+                if err:
+                    return err
+                t.depends = new_deps
         else:
-            t.udas[key] = val    # unknown keys stored as UDA
+            # Unknown keys are UDAs; an empty value deletes the UDA
+            if val == "":
+                t.udas.pop(key, None)
+            else:
+                t.udas[key] = val
 
     t.modified = _now_iso()
     write_tasks(yaml_path, tasks)

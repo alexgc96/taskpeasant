@@ -396,13 +396,17 @@ def cmd_bulk(yaml_path: str, filter_tokens: list, verb: str,
 
 # ── export (used by Flask API routes) ────────────────────────────────────────
 
-def cmd_export(yaml_path: str, filter_tokens: list = None) -> list:
-    """Return TW-wire-format dicts, ready to JSON-serialise for the UI."""
+def cmd_export(yaml_path: str, filter_tokens: list = None, config=None) -> list:
+    """Return TW-wire-format dicts, ready to JSON-serialise for the UI.
+
+    config: optional UrgencyConfig forwarded to compute_urgency.
+    """
     from .urgency import compute_urgency
-    tasks = read_tasks(yaml_path)
-    assign_ids(yaml_path, tasks)
+    all_tasks = read_tasks(yaml_path)
+    assign_ids(yaml_path, all_tasks, config)
+    tasks = all_tasks
     if filter_tokens:
-        tasks = apply_filter(tasks, filter_tokens)
+        tasks = apply_filter(tasks, filter_tokens, all_tasks=all_tasks)
     for t in tasks:
-        t.urgency_value = compute_urgency(t)
+        t.urgency_value = compute_urgency(t, config)
     return [t.to_tw_export() for t in tasks]

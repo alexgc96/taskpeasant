@@ -184,6 +184,10 @@ def main() -> None:
 
 
 def _main() -> None:
+    # Config file is a CLI-only concern — the library path never reads it.
+    from ._config import load_cli_config
+    cfg = load_cli_config()
+
     parser = argparse.ArgumentParser(
         prog="tp",
         description="TaskPeasant — YAML-native task backend",
@@ -191,9 +195,10 @@ def _main() -> None:
     )
     parser.add_argument(
         "--file", "-f",
-        default=os.environ.get("TASKPEASANT_FILE", "tasks.yaml"),
+        default=None,
         metavar="FILE",
-        help="YAML file to use (default: ./tasks.yaml or $TASKPEASANT_FILE)",
+        help="YAML file to use (default: ./tasks.yaml, $TASKPEASANT_FILE, "
+             "or data.location from the config file)",
     )
     parser.add_argument(
         "--yes", "-y", action="store_true",
@@ -203,7 +208,17 @@ def _main() -> None:
     args = parser.parse_args()
 
     tokens = args.command or []
-    yaml_path = args.file
+    # Precedence: --file > $TASKPEASANT_FILE > config data.location > default
+    yaml_path = (args.file
+                 or os.environ.get("TASKPEASANT_FILE", "")
+                 or cfg.data_location
+                 or "tasks.yaml")
+
+    # Urgency overrides go into the live WEIGHTS dict — the one knob the
+    # frozen execute_command path (which mutations delegate to) can see.
+    if cfg.urgency_overrides:
+        from .urgency import WEIGHTS
+        WEIGHTS.update(cfg.urgency_overrides)
 
     # Strip leading 'task' keyword
     if tokens and tokens[0].lower() == "task":
@@ -279,6 +294,11 @@ def _main() -> None:
     bulk = None
     if first != "add" and not first.isdigit() and not _is_uuid(resolved_first):
         bulk = _split_bulk(tokens)
+
+    # Config default project: only for `add`, only when none was given
+    if (first == "add" and cfg.default_project
+            and not any(t.startswith("project:") for t in tokens)):
+        tokens = tokens + [f"project:{cfg.default_project}"]
 
     if first == "add" or bulk or (second in mutation_verbs) or (
             _is_uuid(resolved_first) and second in mutation_verbs):

@@ -32,7 +32,9 @@ from ._dates import resolve_date, parse_date
 from ._taskrc import Taskrc, extract_rc_overrides, write_taskrc_value, \
     default_taskrc_write_path
 from .query import apply_filter
-from .reports import cmd_history, cmd_ghistory, cmd_burndown, cmd_calendar
+from .reports import (cmd_burndown, cmd_calendar, cmd_ghistory, cmd_history,
+                      cmd_projects, cmd_stats, cmd_summary, cmd_tags,
+                      cmd_timesheet, cmd_udas)
 from .storage import read_tasks, assign_ids
 from .urgency import compute_urgency
 
@@ -205,15 +207,41 @@ def _execute_command(raw: str, yaml_path: str, config: Taskrc = None) -> str:
         from .report_engine import list_columns
         return list_columns()
 
-    # ── Graphical reports ─────────────────────────────────────────────────────
-    if first in ("history",):
-        return cmd_history(read_tasks(yaml_path))
-    if first in ("ghistory",):
-        return cmd_ghistory(read_tasks(yaml_path))
-    if first in ("burndown", "burndown.daily"):
-        return cmd_burndown(read_tasks(yaml_path))
-    if first in ("calendar",):
-        return cmd_calendar(read_tasks(yaml_path))
+    # ── Graphical / aggregate reports ─────────────────────────────────────────
+    base, _, sub = first.partition(".")
+    _hist_periods = {"": "monthly", "monthly": "monthly", "annual": "annual",
+                     "daily": "daily", "weekly": "weekly"}
+    if base == "history" and sub in _hist_periods:
+        return cmd_history(_filtered_tasks(yaml_path, tokens[1:]),
+                           _hist_periods[sub])
+    if base == "ghistory" and sub in _hist_periods:
+        return cmd_ghistory(_filtered_tasks(yaml_path, tokens[1:]),
+                            _hist_periods[sub])
+    if base == "burndown" and (sub or "daily") in ("daily", "weekly",
+                                                   "monthly"):
+        return cmd_burndown(_filtered_tasks(yaml_path, tokens[1:]),
+                            sub or "daily")
+    if first == "calendar":
+        return cmd_calendar(read_tasks(yaml_path), tokens[1:], conf)
+    if first == "summary":
+        return cmd_summary(_filtered_tasks(yaml_path, tokens[1:]))
+    if first == "stats":
+        return cmd_stats(_filtered_tasks(yaml_path, tokens[1:]))
+    if first == "timesheet":
+        weeks = int(tokens[1]) if len(tokens) > 1 and tokens[1].isdigit() \
+            else 4
+        return cmd_timesheet(read_tasks(yaml_path), weeks)
+    if first == "projects":
+        return cmd_projects(_filtered_tasks(yaml_path, tokens[1:]))
+    if first == "tags":
+        return cmd_tags(_filtered_tasks(yaml_path, tokens[1:]))
+    if first == "udas":
+        return cmd_udas(read_tasks(yaml_path), conf)
+    if first in ("ids", "uuids", "_ids", "_uuids", "_projects", "_tags",
+                 "_commands"):
+        return _cmd_helpers(yaml_path, first, tokens[1:], conf)
+    if first == "_get":
+        return _cmd_get(yaml_path, tokens[1:])
     if first == "count":
         return _cmd_count(yaml_path, tokens[1:])
 
@@ -308,6 +336,84 @@ def _execute_command(raw: str, yaml_path: str, config: Taskrc = None) -> str:
     if default_report in report_names:
         return run_report(yaml_path, default_report, filter_tokens, conf)
     return _cmd_list(yaml_path, filter_tokens)
+
+
+# ── Filter / helper commands ──────────────────────────────────────────────────
+
+def _filtered_tasks(yaml_path: str, filter_tokens: list) -> list:
+    """Read + assign ids/vtags + apply an optional filter."""
+    tasks = read_tasks(yaml_path)
+    assign_ids(yaml_path, tasks)
+    if filter_tokens:
+        return apply_filter(tasks, filter_tokens, all_tasks=tasks)
+    return tasks
+
+
+def _compact_id_ranges(ids: list) -> str:
+    """[1,2,3,5] → '1-3 5' (TW `task ids` output form)."""
+    if not ids:
+        return ""
+    ids = sorted(set(ids))
+    parts, run_start, prev = [], ids[0], ids[0]
+    for i in ids[1:]:
+        if i == prev + 1:
+            prev = i
+            continue
+        parts.append(f"{run_start}-{prev}" if prev > run_start
+                     else str(run_start))
+        run_start = prev = i
+    parts.append(f"{run_start}-{prev}" if prev > run_start
+                 else str(run_start))
+    return " ".join(parts)
+
+
+def _cmd_helpers(yaml_path: str, cmd: str, filter_tokens: list, conf) -> str:
+    """ids / uuids / _ids / _uuids / _projects / _tags / _commands."""
+    if cmd == "_commands":
+        names = sorted(set(conf.report_names()) | {
+            "add", "annotate", "append", "burndown", "calendar", "columns",
+            "config", "count", "delete", "denotate", "done", "duplicate",
+            "edit", "export", "ghistory", "history", "ids", "import", "info",
+            "log", "modify", "prepend", "projects", "purge", "reports",
+            "show", "start", "stats", "stop", "summary", "tags", "timesheet",
+            "udas", "undo", "uuids", "version"})
+        return "\n".join(names)
+
+    tasks = _filtered_tasks(yaml_path, filter_tokens)
+    if cmd == "ids":
+        return _compact_id_ranges([t.id for t in tasks if t.id])
+    if cmd == "_ids":
+        return "\n".join(str(t.id) for t in tasks if t.id)
+    if cmd == "uuids":
+        return " ".join(t.uuid for t in tasks)
+    if cmd == "_uuids":
+        return "\n".join(t.uuid for t in tasks)
+    if cmd == "_projects":
+        return "\n".join(sorted({t.project for t in tasks if t.project}))
+    if cmd == "_tags":
+        return "\n".join(sorted({tag for t in tasks for tag in t.tags}))
+    return ""
+
+
+def _cmd_get(yaml_path: str, args: list) -> str:
+    """`task _get <id|uuid>.<attribute>` — minimal DOM support."""
+    if not args or "." not in args[0]:
+        return ""
+    ref, _, attr = args[0].partition(".")
+    tasks = read_tasks(yaml_path)
+    assign_ids(yaml_path, tasks)
+    task = None
+    if ref.isdigit():
+        task = next((t for t in tasks if t.id == int(ref)), None)
+    else:
+        matches = [t for t in tasks if t.uuid.lower().startswith(ref.lower())]
+        task = matches[0] if len(matches) == 1 else None
+    if task is None:
+        return ""
+    from .query import _attr_str
+    if attr == "urgency":
+        return str(compute_urgency(task))
+    return _attr_str(task, attr)
 
 
 # ── Configuration commands ────────────────────────────────────────────────────

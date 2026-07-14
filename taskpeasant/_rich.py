@@ -210,27 +210,29 @@ def render_ghistory(buckets: dict) -> Table:
 
 # ── Burndown ──────────────────────────────────────────────────────────────────
 
-def render_burndown(daily: list, dates: list) -> Text:
-    """Color the burndown chart: X=red (pending), .=green (done)."""
-    from .reports import cmd_burndown as _plain_burndown
-    # Re-render using plain text then colorize
-    plain = _plain_burndown.__doc__   # fallback not used — we rebuild inline
-
+def render_burndown(series: list, dates: list) -> Text:
+    """Color the burndown chart: X=red (pending), o=yellow (started),
+    .=green (done).  `series` holds (pending, started, done) tuples."""
     height    = 15
-    max_count = max((p + d for p, d in daily), default=1) or 1
+    max_count = max((p + s + d for p, s, d in series), default=1) or 1
     y_step    = max_count / height
 
     out = Text()
     out.append(f"{'Daily Burndown':^{len(dates) * 3 + 6}}\n\n", style="bold white")
 
+    def band(value, threshold):
+        return value >= threshold if threshold > 0 else value > 0
+
     for row in range(height, -1, -1):
         threshold = row * y_step
         y_label   = f"{round(threshold):>3} |" if row % (height // 3) == 0 else "    |"
         out.append(y_label, style="dim")
-        for (pending, done) in daily:
-            if done >= threshold:
+        for (pending, started, done) in series:
+            if band(done, threshold):
                 out.append(".  ", style="green")
-            elif (pending + done) >= threshold:
+            elif band(done + started, threshold):
+                out.append("o  ", style="yellow")
+            elif band(pending + started + done, threshold):
                 out.append("X  ", style="red")
             else:
                 out.append("   ")
@@ -238,12 +240,15 @@ def render_burndown(daily: list, dates: list) -> Text:
 
     width = len(dates)
     out.append("    +" + "-" * (width * 3 - 1) + "\n", style="dim")
-    out.append("      " + "  ".join(d.strftime("%d") for d in dates) + "\n", style="dim")
+    out.append("     " + "".join(f"{d.strftime('%d'):<3}" for d in dates) + "\n", style="dim")
     month_parts = [d.strftime("%b") if d.day == 1 else "   " for d in dates]
     if any(d.day == 1 for d in dates):
-        out.append("      " + "  ".join(month_parts).rstrip() + "\n", style="dim")
+        out.append("     " + "".join(f"{p:<3}" for p in month_parts).rstrip()
+                   + "\n", style="dim")
     out.append("\n")
     out.append(". Done", style="green")
+    out.append("   ")
+    out.append("o Started", style="yellow")
     out.append("   ")
     out.append("X Pending", style="red")
     out.append("\n")

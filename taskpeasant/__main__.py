@@ -96,29 +96,10 @@ def _rich_ghistory(yaml_path: str) -> None:
 
 
 def _rich_burndown(yaml_path: str) -> None:
-    from datetime import datetime, timedelta, timezone
+    from .reports import burndown_series
     tasks = read_tasks(yaml_path)
-    days  = 30
-    now   = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    dates = [now - timedelta(days=i) for i in range(days - 1, -1, -1)]
-
-    def snapshot(day):
-        from datetime import timedelta as td
-        day_end = day + td(days=1)
-        pending = done = 0
-        for t in tasks:
-            entry_dt = parse_date(t.entry)
-            if not entry_dt or entry_dt >= day_end:
-                continue
-            end_dt = parse_date(t.end) if t.end else None
-            if end_dt and end_dt < day_end and t.status == "completed":
-                done += 1
-            else:
-                pending += 1
-        return pending, done
-
-    daily = [snapshot(d) for d in dates]
-    console.print(R.render_burndown(daily, dates))
+    dates, series = burndown_series(tasks, "daily")
+    console.print(R.render_burndown(series, dates))
 
 
 def _rich_calendar(yaml_path: str) -> None:
@@ -183,8 +164,16 @@ def _main() -> None:
 
     first = tokens[0] if tokens else ""
 
-    # ── Config commands → plain text output ──────────────────────────────────
-    if first in ("show", "config"):
+    # ── Plain-text commands (config, aggregates, helpers) ────────────────────
+    _plain_cmds = {"show", "config", "reports", "columns", "summary", "stats",
+                   "timesheet", "projects", "tags", "udas", "ids", "uuids",
+                   "_ids", "_uuids", "_projects", "_tags", "_commands",
+                   "_get", "count"}
+    _graphical_bases = {"history", "ghistory", "burndown"}
+    _base = first.partition(".")[0]
+    if first in _plain_cmds or \
+            (_base in _graphical_bases and "." in first) or \
+            (first == "calendar" and len(tokens) > 1):
         raw = "task " + " ".join(shlex.quote(t) for t in tokens)
         console.print(execute_command(raw, yaml_path, config=conf),
                       highlight=False, markup=False)

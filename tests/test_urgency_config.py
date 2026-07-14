@@ -17,19 +17,26 @@ def test_default_config_matches_weights():
     assert UrgencyConfig.from_weights(WEIGHTS) == DEFAULT_CONFIG
 
 
-def test_default_call_equals_default_config(make_task):
+def test_explicit_urgency_config_selects_legacy_model(make_task):
+    # Since 0.4.0 the *default* call runs the TW polynomial; passing an
+    # UrgencyConfig instance is the frozen seam that pins the pre-0.4
+    # additive model.
     t = make_task(due=iso(now_utc() - timedelta(days=1)), priority="H",
                   tags=["urgent"])
-    assert compute_urgency(t) == compute_urgency(t, DEFAULT_CONFIG)
+    legacy = compute_urgency(t, DEFAULT_CONFIG)
+    # additive: overdue 12 + H 6 + urgent 6 + age 0.01/day
+    assert 24.0 <= legacy <= 24.1
+    assert compute_urgency(t) != legacy   # default = TW polynomial
 
 
 def test_live_weights_mutation_still_honoured(make_task):
+    # Mutating WEIGHTS opts the *default* call back into the additive model
     t = make_task(tags=["urgent"])
-    base = compute_urgency(t)
+    legacy_base = compute_urgency(t, UrgencyConfig.from_weights(WEIGHTS))
     old = WEIGHTS["tag_urgent"]
     try:
         WEIGHTS["tag_urgent"] = old + 10.0
-        assert compute_urgency(t) == round(base + 10.0, 2)
+        assert compute_urgency(t) == round(legacy_base + 10.0, 2)
     finally:
         WEIGHTS["tag_urgent"] = old
 
@@ -37,7 +44,8 @@ def test_live_weights_mutation_still_honoured(make_task):
 def test_explicit_config_overrides(make_task):
     t = make_task(priority="H")
     custom = UrgencyConfig(priority={"H": 10.0, "M": 3.9, "L": 1.8})
-    assert compute_urgency(t, custom) - compute_urgency(t) == 4.0
+    assert compute_urgency(t, custom) - compute_urgency(t, DEFAULT_CONFIG) \
+        == 4.0
 
 
 def test_blocking_bonus_only_when_annotated(make_task):
@@ -45,21 +53,22 @@ def test_blocking_bonus_only_when_annotated(make_task):
     blocked = make_task(description="blocked", depends=[blocker.uuid])
 
     # Un-annotated: legacy behavior — no blocking bonus, presence penalty
-    plain = compute_urgency(blocker)
-    assert compute_urgency(blocked) == max(
+    plain = compute_urgency(blocker, DEFAULT_CONFIG)
+    assert compute_urgency(blocked, DEFAULT_CONFIG) == max(
         0.0, round(plain + WEIGHTS["blocked"], 2))
 
     annotate_virtual_tags([blocker, blocked])
-    assert compute_urgency(blocker) == round(plain + WEIGHTS["blocking"], 2)
+    assert compute_urgency(blocker, DEFAULT_CONFIG) == \
+        round(plain + WEIGHTS["blocking"], 2)
 
 
 def test_blocked_uses_graph_not_presence_when_annotated(make_task):
     done_dep = make_task(status="completed")
     t = make_task(depends=[done_dep.uuid])
-    unblocked_score = compute_urgency(make_task())
+    unblocked_score = compute_urgency(make_task(), DEFAULT_CONFIG)
     annotate_virtual_tags([done_dep, t])
     # dep completed → not BLOCKED → no penalty
-    assert compute_urgency(t) == unblocked_score
+    assert compute_urgency(t, DEFAULT_CONFIG) == unblocked_score
 
 
 def test_clamped_at_zero(make_task):

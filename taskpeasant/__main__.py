@@ -20,6 +20,7 @@ from rich.prompt import Confirm
 
 from . import _rich as R
 from ._dates import parse_date
+from ._taskrc import Taskrc, extract_rc_overrides, load_taskrc
 from .peasant_parser import execute_command, _resolve_id, _is_uuid, _split_bulk
 from .query import FilterError, apply_filter
 from .reports import _build_buckets, cmd_burndown
@@ -223,10 +224,22 @@ def _main() -> None:
     # Strip leading 'task' keyword
     if tokens and tokens[0].lower() == "task":
         tokens = tokens[1:]
-    # Strip rc.* flags
-    tokens = [t for t in tokens if not t.startswith("rc.")]
+
+    # Taskrc config: file layered under rc.key=value command-line overrides.
+    # rc:<path> selects an alternate taskrc.
+    tokens, rc_overrides = extract_rc_overrides(tokens)
+    alt_rc = rc_overrides.pop("__taskrc_path__", "")
+    conf = load_taskrc(alt_rc or None)
+    conf.update(rc_overrides)
 
     first = tokens[0] if tokens else ""
+
+    # ── Config commands → plain text output ──────────────────────────────────
+    if first in ("show", "config"):
+        raw = "task " + " ".join(shlex.quote(t) for t in tokens)
+        console.print(execute_command(raw, yaml_path, config=conf),
+                      highlight=False, markup=False)
+        return
 
     # ── Display commands → rich renderers ────────────────────────────────────
     if not first or first == "list":
@@ -313,7 +326,7 @@ def _main() -> None:
                 return
         # Mutation path — run through execute_command, pretty-print result
         raw = "task " + " ".join(shlex.quote(t) for t in tokens)
-        result = execute_command(raw, yaml_path)
+        result = execute_command(raw, yaml_path, config=conf)
         if result.startswith("Error") or result.startswith("No task") or result.startswith("Parse"):
             console.print(R.error(result))
         else:

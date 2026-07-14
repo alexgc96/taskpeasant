@@ -29,6 +29,8 @@ from typing import Optional
 
 from . import commands
 from ._dates import resolve_date, parse_date
+from ._taskrc import Taskrc, extract_rc_overrides, write_taskrc_value, \
+    default_taskrc_write_path
 from .query import apply_filter
 from .reports import cmd_history, cmd_ghistory, cmd_burndown, cmd_calendar
 from .storage import read_tasks, assign_ids
@@ -133,23 +135,29 @@ def _parse_mod_tokens(tokens: list) -> dict:
 
 # ── Main parser / dispatcher ──────────────────────────────────────────────────
 
-def execute_command(raw: str, yaml_path: str) -> str:
+def execute_command(raw: str, yaml_path: str, config: Taskrc = None) -> str:
     """
     Parse a raw CLI string and dispatch to the correct command.
     Returns terminal output as a plain string.
 
     yaml_path must be the absolute path to a YAML file that TaskPeasant
     is allowed to read and write (it edits the `taskpeasant_tasks:` key).
+
+    config (optional, added 0.4.0): a Taskrc instance carrying rc-style
+    settings (report definitions, urgency coefficients, aliases, ...).
+    When omitted, built-in defaults apply.  rc.key=value tokens in `raw`
+    override it per-call; unknown keys are ignored, so hosts that send
+    rc.* noise (the pre-0.4 "silently stripped" contract) keep working.
     """
     # Contract: this function returns a string and never raises
     # (docs/BACKWARDS_COMPAT.md §5), so trap everything.
     try:
-        return _execute_command(raw, yaml_path)
+        return _execute_command(raw, yaml_path, config)
     except Exception as e:
         return f"Error: {e}"
 
 
-def _execute_command(raw: str, yaml_path: str) -> str:
+def _execute_command(raw: str, yaml_path: str, config: Taskrc = None) -> str:
     try:
         tokens = shlex.split(raw)
     except ValueError as e:
@@ -162,8 +170,14 @@ def _execute_command(raw: str, yaml_path: str) -> str:
     if tokens and tokens[0].lower() == "task":
         tokens = tokens[1:]
 
-    # Strip rc.* flags silently (e.g. rc.gc=off, rc.confirmation=off)
-    tokens = [t for t in tokens if not t.startswith("rc.")]
+    # rc.key=value / rc.key:value overrides — applied to a per-call copy
+    # of the config (pre-0.4 these were stripped; honoring known keys is
+    # a superset, unknown keys still have no effect).
+    tokens, rc_overrides = extract_rc_overrides(tokens)
+    rc_overrides.pop("__taskrc_path__", None)   # CLI-only concern
+    conf = Taskrc(dict(config._values), config.source_path) if config \
+        else Taskrc()
+    conf.update(rc_overrides)
 
     if not tokens:
         return _cmd_list(yaml_path, [])
@@ -174,6 +188,12 @@ def _execute_command(raw: str, yaml_path: str) -> str:
     _pre = _parse_mod_tokens(tokens)
     if "__date_error__" in _pre:
         return f"Error: '{_pre['__date_error__']}' is not a recognised date. Try: today, +3d, eom, monday, YYYY-MM-DD"
+
+    # ── Configuration commands ───────────────────────────────────────────────
+    if first == "show":
+        return _cmd_show(conf, " ".join(tokens[1:]))
+    if first == "config":
+        return _cmd_config(conf, tokens[1:])
 
     # ── Reports ──────────────────────────────────────────────────────────────
     if first in ("history",):
@@ -274,6 +294,47 @@ def _execute_command(raw: str, yaml_path: str) -> str:
 
     # ── Default: formatted list ───────────────────────────────────────────────
     return _cmd_list(yaml_path, filter_tokens)
+
+
+# ── Configuration commands ────────────────────────────────────────────────────
+
+def _cmd_show(conf: Taskrc, pattern: str) -> str:
+    """`task show [pattern]` — effective configuration, TW-style."""
+    pattern = pattern.strip().lower()
+    rows = [(k, v) for k, v in conf.items()
+            if not pattern or pattern in k.lower()]
+    if not rows:
+        return f"No configuration settings match '{pattern}'"
+
+    width = max(len(k) for k, _ in rows)
+    lines = [f"{'Config Variable':<{width}}  Value", "-" * (width + 30)]
+    modified = 0
+    for k, v in rows:
+        marker = ""
+        if not conf.is_default(k):
+            marker = " *"
+            modified += 1
+        lines.append(f"{k:<{width}}  {v}{marker}")
+    lines.append("")
+    lines.append(f"{len(rows)} settings shown"
+                 + (f", {modified} changed from default (*)" if modified else "")
+                 + (f".  Config read from {conf.source_path}"
+                    if conf.source_path else "."))
+    return "\n".join(lines)
+
+
+def _cmd_config(conf: Taskrc, args: list) -> str:
+    """`task config <key> [value]` — set/unset a taskrc value.
+
+    Writes to the loaded taskrc when one exists; falls back to the
+    default XDG path so first-time `task config` bootstraps a file.
+    """
+    if not args:
+        return "Specify the name of a config variable to modify."
+    key = args[0]
+    value = " ".join(args[1:]) if len(args) > 1 else None
+    path = conf.source_path or default_taskrc_write_path()
+    return write_taskrc_value(path, key, value)
 
 
 # ── Output formatters ─────────────────────────────────────────────────────────

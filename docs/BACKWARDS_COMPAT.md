@@ -127,6 +127,44 @@ These four strings, lowercase, exactly. Any unknown status string read from YAML
 
 ---
 
+## 0.4.0 addendum — how the parity release respects this contract
+
+Everything in 0.4.0 is additive. The details an embedder should know:
+
+1. **`rc.*` tokens are now honored, not stripped.** §5 froze "rc.* flags
+   silently stripped". 0.4.0 applies *known* keys as per-call config
+   overrides; unknown keys still have no effect. A host that sent rc.*
+   noise keeps working; a host that sends a real key now gets TW
+   behaviour. This is a superset of the floor.
+2. **`execute_command` gained `config=`** — a new optional keyword
+   (allowed by §1). Pass a `Taskrc` to supply report definitions,
+   urgency coefficients, aliases, contexts, and color rules.
+3. **Undo journal is a sidecar file** (`<yaml_path>.undo`), because §2
+   forbids new top-level YAML keys. Deleting the sidecar only loses
+   undo history, never task data. Journal writes never raise.
+4. **Urgency default switched to the TW polynomial.** §6 freezes the
+   ~0–20 scale and the ≥ 0 clamp — both hold. Any caller that passes an
+   `UrgencyConfig` or mutates `WEIGHTS` still gets the pre-0.4 additive
+   model with identical numbers, so existing tuning paths are
+   bit-for-bit stable.
+5. **Recurrence is opt-in.** §7 freezes the four-status enum and this
+   release does NOT change it: `recur:` is rejected unless the host
+   sets `recurrence=on`. Only an opted-in host will ever see
+   `status: recurring` template rows (which always carry a `recur`
+   key). `Task.from_dict` still coerces a bare unknown status —
+   including `recurring` *without* `recur` — to `pending`.
+   **Do not enable `recurrence=on` for a Studio OS file** until the
+   host's own YAML readers tolerate a fifth status value.
+6. **New public symbols** (`cmd_duplicate`, `cmd_purge`, `cmd_log`,
+   `cmd_append`, `cmd_prepend`, `cmd_denotate`, `cmd_import`,
+   `cmd_undo`, `Taskrc`, `load_taskrc`) are stable in intent but not
+   yet frozen; they'll be added to §1 after one release of soak time.
+7. **New `Task` fields** (`recur`, `until`, `parent`, `mask`, `imask`)
+   are omitted from `to_dict()` when empty, so YAML written for
+   non-recurring data is byte-compatible with 0.3.
+
+---
+
 ## Deferred / aspirational (NOT frozen yet)
 
 These exist but are explicitly *unstable* and may move:

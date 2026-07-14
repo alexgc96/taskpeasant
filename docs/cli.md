@@ -378,11 +378,44 @@ are ignored.
 | Variable | Default | Purpose |
 |---|---|---|
 | `TASKPEASANT_FILE` | `./tasks.yaml` | Default YAML file when `--file` is omitted |
-| `TASKPEASANT_CONFIG` | _(unset)_ | Explicit config file path (beats the XDG search) |
+| `TASKPEASANT_CONFIG` | _(unset)_ | Explicit legacy YAML config path (beats the XDG search) |
+| `TASKPEASANT_TASKRC` / `TASKRC` | _(unset)_ | Explicit taskrc path (0.4.0+) |
 
 ---
 
 ## rc.* flags
 
-Taskwarrior `rc.*` flags (e.g. `rc.gc=off`, `rc.confirmation=off`) are
-silently stripped. This lets existing TW command strings work unchanged.
+Since 0.4.0, Taskwarrior `rc.key=value` flags are honored as per-call
+config overrides for every key TaskPeasant understands (reports,
+urgency, colors, aliases, contexts, recurrence, …). Unknown keys are
+still silently ignored, so existing TW command strings work unchanged.
+`rc:<path>` selects an alternate taskrc file.
+
+---
+
+## 0.4.0 — the Taskwarrior-parity release
+
+The CLI now covers most of stock Taskwarrior. Highlights (see
+[`parity.md`](parity.md) for the full matrix):
+
+- **Reports**: `next`, `list`, `ls`, `minimal`, `long`, `all`, `active`,
+  `ready`, `overdue`, `waiting`, `completed`, `blocked`, `blocking`,
+  `unblocked`, `newest`, `oldest`, `recurring` — plus custom reports via
+  `report.<name>.columns/labels/sort/filter` in the taskrc. Any filter
+  can precede or follow the report name. `task reports`, `task columns`.
+- **Graphical**: `burndown[.daily|.weekly|.monthly]`,
+  `history`/`ghistory` `[.daily|.weekly|.monthly|.annual]`, `calendar
+  [due | <year> | <month> <year>]`, `summary`, `stats`,
+  `timesheet [weeks]`, `projects`, `tags`, `udas`, `colors`.
+- **Filters**: attribute modifiers (`due.before:eow`,
+  `description.word:fix`, `project.isnt:film`), ID ranges (`1-5,8`),
+  `/regex/`, `limit:N`, UDA filters, abbreviations (`proj:`, `pri:`).
+- **Dates**: `sod/eod`, `soq/eoq`, ordinals (`23rd`), epoch, signed
+  offsets (`-2w`, `+90min`) and compounds (`eom-2d`, `now+3h`).
+- **Lifecycle**: `undo`, `duplicate`, `purge`, `log`, `append`,
+  `prepend`, `denotate`, `import`, `edit` ($EDITOR), `version` — all of
+  the mutating verbs work single-target, by ID, or as bulk filter ops.
+- **Config**: taskrc file + `task show` + `task config`, `alias.*`,
+  `task context …`, color rules, `urgency.*` coefficients.
+- **Recurrence** (opt-in): set `recurrence=on`, then
+  `task add pay rent due:1st recur:monthly until:2027-01-01`.

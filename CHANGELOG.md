@@ -23,6 +23,93 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [0.4.0] — 2026-07-14
+
+The big Taskwarrior-parity release: TaskPeasant now aims to be
+"Taskwarrior logic ported to Python, as close as we could get".
+Everything below is additive — the frozen contract in
+`docs/BACKWARDS_COMPAT.md` is untouched and its test suite passes
+unmodified.
+
+### Added
+- **Taskrc config system** (`_taskrc.py`) — TW-style `key=value` config
+  with `include`, layered defaults ← file ← `rc.key=value` command-line
+  overrides, `rc:<path>` alternate file. Search order:
+  `$TASKPEASANT_TASKRC`/`$TASKRC`, `~/.taskpeasantrc` (taskrc format),
+  `$XDG_CONFIG_HOME/taskpeasant/taskrc`. A YAML-mapping
+  `~/.taskpeasantrc` keeps the legacy 0.3 config behaviour.
+  New commands: `task show [pattern]`, `task config <key> [value]`.
+  `execute_command` gained an optional `config=` keyword (Taskrc).
+- **Report engine** (`report_engine.py`) — TW report definitions
+  (`report.<name>.columns/labels/sort/filter`) with all TW built-ins:
+  `next`, `list`, `ls`, `minimal`, `long`, `all`, `active`, `blocked`,
+  `blocking`, `unblocked`, `completed`, `newest`, `oldest`, `overdue`,
+  `ready`, `recurring`, `waiting`. TW column formats
+  (`description.count`, `due.relative`, `entry.age`, `uuid.short`,
+  `depends.indicator`, `tags.count`, `status.short`, UDA columns, …),
+  sort specs (`urgency-,due+`), `limit:N` / `limit:page`, empty columns
+  dropped. Custom reports via taskrc or `rc.report.foo.*` overrides.
+  `task reports` and `task columns` list what's available.
+- **Filter parity** — TW attribute modifiers (`.before/.after/.by/
+  .over/.under/.above/.below/.is/.isnt/.has/.hasnt/.startswith/
+  .endswith/.left/.right/.word/.noword`), plain date-attribute day
+  matching (`due:tomorrow`), `/regex/` tokens, ID ranges (`1-5`,
+  `1,3,7-9`), attribute abbreviations (`proj:`, `pri:`, `desc.has:`),
+  project hierarchy matching (`project:film` matches `film.editing`),
+  UDA filters, `entry`/`end`/`modified`/`start` filterable.
+- **Date parity** — compound expressions (`eom-2d`, `now+3h`,
+  `monday+1w`), signed offsets with unit words (`-2w`, `+90min`),
+  `eod`/`sod`, `soq`/`eoq`, ordinals (`23rd`), epoch timestamps.
+- **TW urgency polynomial** — the real Taskwarrior formula is now the
+  default: coefficient × measure with the due-date ramp (0.2 → 1.0
+  across due−14d…due+7d), tiered tag/annotation measures, age/365,
+  waiting −3, blocking +8, blocked −5, `+next` +15. All coefficients
+  configurable via `urgency.*` keys, including
+  `urgency.uda.<name>[.<value>].coefficient`,
+  `urgency.user.tag/project/keyword.<x>.coefficient`, and
+  `urgency.inherit`. Passing an `UrgencyConfig` (or mutating `WEIGHTS`)
+  still selects the pre-0.4 additive model, unchanged.
+- **Graphical reports** — `burndown.daily/.weekly/.monthly` (stacked
+  pending/started/done, net fix rate, estimated completion),
+  `history` and `ghistory` in `daily/weekly/monthly/annual` variants
+  (filterable), TW-style `calendar` (`due`, `<year>`, `<month> <year>`,
+  `weekstart`, `calendar.details`), `summary` (per-project completion
+  bars), `stats`, `timesheet [weeks]`, `projects`, `tags`, `udas`.
+- **Lifecycle commands** — `undo` (journal in a sidecar `<file>.undo`,
+  never a new YAML key), `duplicate`, `purge` (deleted-only; cleans
+  dangling depends), `log`, `append`, `prepend`, `denotate`, `import`
+  (TW wire JSON, merges by uuid), `task edit` (`$EDITOR`, CLI only),
+  `version`. All work single-target, by ID, and as bulk filter ops.
+- **Helper commands** — `ids` (compact ranges), `uuids`, `_ids`,
+  `_uuids`, `_projects`, `_tags`, `_commands`, `_get <ref>.<attr>`.
+- **Color rules** (`_colors.py`) — TW `color.*` rules with
+  `rule.precedence.color`, TW color specs (`color15`, `rgb530`,
+  `gray10`, `bright red on yellow`) mapped to rich styles, applied to
+  every CLI report row; `task colors`.
+- **Aliases & contexts** — `alias.<name>` first-token expansion;
+  `task context define/set/none/show/list/delete` with read filters
+  applied to reports/export/count and write filters applied on `add`
+  (`context.<name>.read`/`.write` split supported).
+- **Recurrence — opt-in** (`recurrence=on`, default **off**) —
+  `recur:`/`until:` on add create templates (status `recurring`),
+  children synthesized per command with catch-up and
+  `recurrence.limit` future instances, TW `mask`/`imask` bookkeeping,
+  `until` expiry. Off by default so embedded hosts never see a fifth
+  status value without opting in.
+- **Virtual tags** — `+READY`, `+UNBLOCKED`, `+UDA`, `+LATEST`,
+  `+PRIORITY`, `+UNTIL`, `+PARENT`, `+CHILD` join the 0.3 set.
+
+### Changed
+- Default urgency model is TW's polynomial (see Added); the additive
+  model remains available through the frozen `UrgencyConfig`/`WEIGHTS`
+  paths, so embedder scores are reproducible bit-for-bit.
+- Bare `task [filter]` now runs the `default.command` report (`list`);
+  set `default.command=next` for stock-TW behaviour.
+- `rc.*` tokens: known keys are now honored as per-call overrides;
+  unknown keys are still silently ignored (the 0.3 contract floor).
+
+---
+
 ## [0.3.0] — 2026-07-12
 
 TaskWarrior-parity sprint: virtual tags, boolean filter expressions, bulk

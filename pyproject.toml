@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name            = "taskpeasant"
-version         = "0.3.0"
-description     = "YAML-native, pure-Python task backend. Drop-in Taskwarrior alternative for local-first apps."
+version         = "0.4.0"
+description     = "Taskwarrior logic ported to Python, as close as we could get. YAML-native task engine for local-first apps."
 readme          = "README.md"
 license         = { text = "GPL-3.0-or-later" }
 requires-python = ">=3.9"

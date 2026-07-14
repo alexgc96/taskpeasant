@@ -20,9 +20,11 @@ from ._dates import parse_date
 from .task_model import Task
 
 VIRTUAL_TAG_NAMES = frozenset([
-    "PENDING", "COMPLETED", "DELETED", "WAITING",
+    "PENDING", "COMPLETED", "DELETED", "WAITING", "RECURRING",
     "ACTIVE", "OVERDUE", "TODAY", "DUE", "SCHEDULED",
     "TAGGED", "ANNOTATED", "BLOCKED", "BLOCKING", "PROJECT",
+    "READY", "UNBLOCKED", "UDA", "LATEST", "PARENT", "CHILD",
+    "UNTIL", "PRIORITY",
 ])
 
 # Statuses whose tasks participate in the dependency graph
@@ -66,6 +68,14 @@ def compute_virtual_tags(
         vtags.add("ANNOTATED")
     if task.project:
         vtags.add("PROJECT")
+    if task.priority:
+        vtags.add("PRIORITY")
+    if task.udas:
+        vtags.add("UDA")
+    if task.udas.get("until"):
+        vtags.add("UNTIL")
+    if task.udas.get("recur"):
+        vtags.add("PARENT" if task.status == "recurring" else "CHILD")
 
     if task.status in _OPEN:
         if tasks_by_uuid is not None:
@@ -76,6 +86,15 @@ def compute_virtual_tags(
                     break
         if reverse_depends is not None and task.uuid in reverse_depends:
             vtags.add("BLOCKING")
+
+    if task.status == "pending":
+        if "BLOCKED" not in vtags:
+            vtags.add("UNBLOCKED")
+        # READY: pending, unblocked, and not scheduled for the future
+        # (a pending status already means any wait date has passed)
+        sched_dt = parse_date(task.scheduled) if task.scheduled else None
+        if "BLOCKED" not in vtags and (sched_dt is None or sched_dt <= now):
+            vtags.add("READY")
 
     return vtags
 
@@ -94,3 +113,8 @@ def annotate_virtual_tags(tasks: List[Task]) -> None:
 
     for t in tasks:
         t.virtual_tags = compute_virtual_tags(t, tasks_by_uuid, reverse_depends)
+
+    # LATEST — the most recently added task (TW semantics)
+    dated = [(t.entry, t.uuid, t) for t in tasks if t.entry]
+    if dated:
+        max(dated)[2].virtual_tags.add("LATEST")

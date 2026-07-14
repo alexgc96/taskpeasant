@@ -48,6 +48,35 @@ def _due_color(due: str) -> str:
     return "white"
 
 
+# ── Report engine table ───────────────────────────────────────────────────────
+
+def render_report(headers: List[str], rows: List[list], specs: List[str],
+                  tasks: List[Task], conf=None) -> Table:
+    """Rich Table for any report-engine result.  Per-cell styling for
+    urgency and due; color rules (M7) hook in via `conf`."""
+    table = Table(box=None, show_header=True, header_style="bold white",
+                  padding=(0, 1), expand=False)
+    for h, spec in zip(headers, specs):
+        base = spec.partition(".")[0]
+        justify = "right" if base in ("id", "urgency") else "left"
+        style = {"uuid": "dim", "id": "bold cyan", "tags": "blue"}.get(base)
+        table.add_column(h, justify=justify, style=style,
+                         no_wrap=(base != "description"))
+
+    for row, t in zip(rows, tasks):
+        cells = []
+        for text, spec in zip(row, specs):
+            base = spec.partition(".")[0]
+            if base == "urgency":
+                cells.append(Text(text, style=_urgency_color(t.urgency_value)))
+            elif base == "due":
+                cells.append(Text(text, style=_due_color(t.due)))
+            else:
+                cells.append(text)
+        table.add_row(*cells)
+    return table
+
+
 # ── Task list (task, task next, task all) ─────────────────────────────────────
 
 def render_list(tasks: List[Task], show_status: bool = False) -> Table:

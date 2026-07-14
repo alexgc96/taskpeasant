@@ -36,6 +36,7 @@ from typing import Dict, List, Optional, Tuple
 
 DEFAULTS: Dict[str, str] = {
     # Behaviour
+    "default.command": "list",
     "confirmation": "1",
     "recurrence":   "0",     # TW default is on; TP is opt-in (compat contract)
     "due":          "7",     # days horizon for the +DUE virtual tag

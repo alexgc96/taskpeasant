@@ -35,78 +35,27 @@ _DISPLAY_VERBS = frozenset(["list", "next", "all", "info", "history", "ghistory"
                              "completed", "waiting"])
 
 
-def _rich_list(yaml_path: str, filter_tokens: list) -> None:
-    tasks = read_tasks(yaml_path)
-    assign_ids(yaml_path, tasks)
-    if filter_tokens:
-        tasks = apply_filter(tasks, filter_tokens)
-    pending = [t for t in tasks if t.status == "pending"]
-    if not pending:
-        console.print("[dim]No pending tasks.[/dim]")
+def _rich_report(yaml_path: str, name: str, filter_tokens: list,
+                 conf: Taskrc) -> None:
+    """Render any engine report as a rich table."""
+    from . import report_engine as RE
+    from .query import FilterError as _FE
+
+    try:
+        built = RE.build_report(yaml_path, name, filter_tokens, conf)
+    except FilterError as e:
+        console.print(R.error(f"Filter error: {e}"))
         return
-    for t in pending:
-        t.urgency_value = compute_urgency(t)
-    pending.sort(key=lambda t: -t.urgency_value)
-    console.print(R.render_list(pending))
-    console.print(f"\n[dim]{len(pending)} task(s)[/dim]")
-
-
-def _rich_next(yaml_path: str, filter_tokens: list) -> None:
-    tasks = read_tasks(yaml_path)
-    assign_ids(yaml_path, tasks)
-    pending = [t for t in tasks if t.status == "pending"]
-    if filter_tokens:
-        pending = apply_filter(pending, filter_tokens, all_tasks=tasks)
-    if not pending:
-        console.print("[dim]No pending tasks.[/dim]")
+    if built is None:
+        console.print(R.error(f"Unknown report '{name}'"))
         return
-    for t in pending:
-        t.urgency_value = compute_urgency(t)
-    pending.sort(key=lambda t: -t.urgency_value)
-    pending = pending[:25]
-    console.print(R.render_list(pending))
-    console.print(f"\n[dim]{len(pending)} task(s)[/dim]")
-
-
-def _rich_all(yaml_path: str, filter_tokens: list) -> None:
-    tasks = read_tasks(yaml_path)
-    assign_ids(yaml_path, tasks)
-    if filter_tokens:
-        tasks = apply_filter(tasks, filter_tokens)
-    if not tasks:
-        console.print("[dim]No tasks.[/dim]")
+    report, headers, rows, tasks, specs = built
+    if not rows:
+        console.print("[dim]No matches.[/dim]")
         return
-    for t in tasks:
-        t.urgency_value = compute_urgency(t)
-    tasks.sort(key=lambda t: (t.status != "pending", -t.urgency_value))
-    console.print(R.render_list(tasks, show_status=True))
-    console.print(f"\n[dim]{len(tasks)} task(s)[/dim]")
-
-
-def _rich_completed(yaml_path: str) -> None:
-    tasks = read_tasks(yaml_path)
-    done = [t for t in tasks if t.status == "completed"]
-    if not done:
-        console.print("[dim]No completed tasks.[/dim]")
-        return
-    done.sort(key=lambda t: t.end or t.modified, reverse=True)
-    for t in done:
-        t.urgency_value = 0.0
-    console.print(R.render_list(done, show_status=True))
-    console.print(f"\n[dim]{len(done)} task(s)[/dim]")
-
-
-def _rich_waiting(yaml_path: str) -> None:
-    tasks = read_tasks(yaml_path)
-    waiting = [t for t in tasks if t.status == "waiting"]
-    if not waiting:
-        console.print("[dim]No waiting tasks.[/dim]")
-        return
-    waiting.sort(key=lambda t: t.wait or "")
-    for t in waiting:
-        t.urgency_value = compute_urgency(t)
-    console.print(R.render_list(waiting, show_status=True))
-    console.print(f"\n[dim]{len(waiting)} task(s)[/dim]")
+    console.print(R.render_report(headers, rows, specs, tasks, conf))
+    n = len(tasks)
+    console.print(f"\n[dim]{n} task{'s' if n != 1 else ''}[/dim]")
 
 
 def _rich_info(yaml_path: str, uuid_prefix: str) -> None:
@@ -242,24 +191,10 @@ def _main() -> None:
         return
 
     # ── Display commands → rich renderers ────────────────────────────────────
-    if not first or first == "list":
-        _rich_list(yaml_path, tokens[1:] if first == "list" else tokens)
-        return
+    report_names = set(conf.report_names())
 
-    if first == "next":
-        _rich_next(yaml_path, tokens[1:])
-        return
-
-    if first == "all":
-        _rich_all(yaml_path, tokens[1:])
-        return
-
-    if first == "completed":
-        _rich_completed(yaml_path)
-        return
-
-    if first == "waiting":
-        _rich_waiting(yaml_path)
+    if not first:
+        _rich_report(yaml_path, conf.get("default.command", "list"), [], conf)
         return
 
     if first == "history":
@@ -277,6 +212,12 @@ def _main() -> None:
     if first == "calendar":
         _rich_calendar(yaml_path)
         return
+
+    # ── Report engine: `task [filter] <report> [filter]` ─────────────────────
+    for i, tok in enumerate(tokens):
+        if tok in report_names:
+            _rich_report(yaml_path, tok, tokens[:i] + tokens[i + 1:], conf)
+            return
 
     # ── UUID / integer-targeted: info → rich panel ────────────────────────────
     resolved_first = first
@@ -333,8 +274,8 @@ def _main() -> None:
             console.print(R.confirm(result))
         return
 
-    # Fallback: treat as filter → rich list
-    _rich_list(yaml_path, tokens)
+    # Fallback: treat as filter → default report
+    _rich_report(yaml_path, conf.get("default.command", "list"), tokens, conf)
 
 
 if __name__ == "__main__":

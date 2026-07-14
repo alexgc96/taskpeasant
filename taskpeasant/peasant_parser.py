@@ -180,6 +180,10 @@ def _execute_command(raw: str, yaml_path: str, config: Taskrc = None) -> str:
     conf.update(rc_overrides)
 
     if not tokens:
+        from .report_engine import run_report
+        default_report = conf.get("default.command", "list")
+        if conf.get(f"report.{default_report}.columns"):
+            return run_report(yaml_path, default_report, [], conf)
         return _cmd_list(yaml_path, [])
 
     first = tokens[0]
@@ -194,8 +198,14 @@ def _execute_command(raw: str, yaml_path: str, config: Taskrc = None) -> str:
         return _cmd_show(conf, " ".join(tokens[1:]))
     if first == "config":
         return _cmd_config(conf, tokens[1:])
+    if first == "reports":
+        from .report_engine import list_reports
+        return list_reports(conf)
+    if first == "columns":
+        from .report_engine import list_columns
+        return list_columns()
 
-    # ── Reports ──────────────────────────────────────────────────────────────
+    # ── Graphical reports ─────────────────────────────────────────────────────
     if first in ("history",):
         return cmd_history(read_tasks(yaml_path))
     if first in ("ghistory",):
@@ -204,14 +214,6 @@ def _execute_command(raw: str, yaml_path: str, config: Taskrc = None) -> str:
         return cmd_burndown(read_tasks(yaml_path))
     if first in ("calendar",):
         return cmd_calendar(read_tasks(yaml_path))
-    if first == "next":
-        return _cmd_next(yaml_path, tokens[1:])
-    if first == "all":
-        return _cmd_all(yaml_path, tokens[1:])
-    if first == "completed":
-        return _cmd_completed(yaml_path)
-    if first == "waiting":
-        return _cmd_waiting(yaml_path)
     if first == "count":
         return _cmd_count(yaml_path, tokens[1:])
 
@@ -269,6 +271,14 @@ def _execute_command(raw: str, yaml_path: str, config: Taskrc = None) -> str:
         # Fallthrough: treat whole thing as a filter + list
         return _cmd_list(yaml_path, tokens)
 
+    # ── Report engine: `task [filter] <report> [filter]` ─────────────────────
+    report_names = set(conf.report_names())
+    for i, tok in enumerate(tokens):
+        if tok in report_names:
+            from .report_engine import run_report
+            return run_report(yaml_path, tok,
+                              tokens[:i] + tokens[i + 1:], conf)
+
     # ── Bulk: `<filter...> <verb>` — any filter may precede a mutation verb ──
     bulk = _split_bulk(tokens)
     if bulk:
@@ -292,7 +302,11 @@ def _execute_command(raw: str, yaml_path: str, config: Taskrc = None) -> str:
     if "export" in tokens:
         return _cmd_export_text(yaml_path, filter_tokens)
 
-    # ── Default: formatted list ───────────────────────────────────────────────
+    # ── Default: implicit list via the report engine (default.command) ───────
+    from .report_engine import run_report
+    default_report = conf.get("default.command", "list")
+    if default_report in report_names:
+        return run_report(yaml_path, default_report, filter_tokens, conf)
     return _cmd_list(yaml_path, filter_tokens)
 
 
@@ -372,91 +386,8 @@ def _cmd_export_text(yaml_path: str, filter_tokens: list) -> str:
     return json.dumps(data, indent=2, default=str)
 
 
-def _cmd_next(yaml_path: str, filter_tokens: list) -> str:
-    """Pending tasks sorted by urgency, top 25."""
-    tasks = read_tasks(yaml_path)
-    assign_ids(yaml_path, tasks)
-    pending = [t for t in tasks if t.status == "pending"]
-    if filter_tokens:
-        from .query import apply_filter
-        pending = apply_filter(pending, filter_tokens, all_tasks=tasks)
-    if not pending:
-        return "No pending tasks."
-    for t in pending:
-        t.urgency_value = compute_urgency(t)
-    pending.sort(key=lambda t: -t.urgency_value)
-    pending = pending[:25]
-
-    lines = [f"{'ID':>3}  {'UUID':>8}  {'Urg':>5}  Description"]
-    lines.append("-" * 65)
-    for t in pending:
-        tag_str = " ".join(f"+{tg}" for tg in t.tags)
-        due_str = f"  due:{t.due[:10]}" if t.due else ""
-        active  = " ▶" if t.start else ""
-        lines.append(
-            f"{t.id:>3}  {t.uuid[:8]:>8}  {t.urgency_value:>5.1f}  "
-            f"{t.description[:34]:<34}  {tag_str}{due_str}{active}"
-        )
-    lines.append(f"\n{len(pending)} task(s)")
-    return "\n".join(lines)
 
 
-def _cmd_all(yaml_path: str, filter_tokens: list) -> str:
-    """All tasks across all statuses."""
-    tasks = read_tasks(yaml_path)
-    assign_ids(yaml_path, tasks)
-    if filter_tokens:
-        from .query import apply_filter
-        tasks = apply_filter(tasks, filter_tokens)
-    if not tasks:
-        return "No tasks."
-    for t in tasks:
-        t.urgency_value = compute_urgency(t)
-    tasks.sort(key=lambda t: (t.status != "pending", -t.urgency_value))
-
-    lines = [f"{'ID':>3}  {'UUID':>8}  {'Status':<10}  {'Urg':>5}  Description"]
-    lines.append("-" * 72)
-    for t in tasks:
-        lines.append(
-            f"{t.id or '—':>3}  {t.uuid[:8]:>8}  {t.status:<10}  "
-            f"{t.urgency_value:>5.1f}  {t.description[:34]}"
-        )
-    lines.append(f"\n{len(tasks)} task(s)")
-    return "\n".join(lines)
-
-
-def _cmd_completed(yaml_path: str) -> str:
-    """Completed tasks, most recent first."""
-    tasks = read_tasks(yaml_path)
-    done  = [t for t in tasks if t.status == "completed"]
-    if not done:
-        return "No completed tasks."
-    done.sort(key=lambda t: t.end or t.modified, reverse=True)
-
-    lines = [f"{'UUID':>8}  {'Completed':<12}  Description"]
-    lines.append("-" * 55)
-    for t in done:
-        end_str = t.end[:10] if t.end else "—"
-        lines.append(f"{t.uuid[:8]:>8}  {end_str:<12}  {t.description[:40]}")
-    lines.append(f"\n{len(done)} task(s)")
-    return "\n".join(lines)
-
-
-def _cmd_waiting(yaml_path: str) -> str:
-    """Waiting tasks with their wait date."""
-    tasks   = read_tasks(yaml_path)
-    waiting = [t for t in tasks if t.status == "waiting"]
-    if not waiting:
-        return "No waiting tasks."
-    waiting.sort(key=lambda t: t.wait or "")
-
-    lines = [f"{'UUID':>8}  {'Wait until':<12}  Description"]
-    lines.append("-" * 55)
-    for t in waiting:
-        wait_str = t.wait[:10] if t.wait else "—"
-        lines.append(f"{t.uuid[:8]:>8}  {wait_str:<12}  {t.description[:40]}")
-    lines.append(f"\n{len(waiting)} task(s)")
-    return "\n".join(lines)
 
 
 def _cmd_count(yaml_path: str, filter_tokens: list) -> str:

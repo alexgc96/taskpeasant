@@ -63,17 +63,22 @@ def render_report(headers: List[str], rows: List[list], specs: List[str],
         table.add_column(h, justify=justify, style=style,
                          no_wrap=(base != "description"))
 
+    from ._colors import style_for_task
+
     for row, t in zip(rows, tasks):
+        row_style = style_for_task(t, conf)
         cells = []
         for text, spec in zip(row, specs):
             base = spec.partition(".")[0]
-            if base == "urgency":
+            if row_style:
+                cells.append(text)      # rule style covers the whole row
+            elif base == "urgency":
                 cells.append(Text(text, style=_urgency_color(t.urgency_value)))
             elif base == "due":
                 cells.append(Text(text, style=_due_color(t.due)))
             else:
                 cells.append(text)
-        table.add_row(*cells)
+        table.add_row(*cells, style=row_style or None)
     return table
 
 

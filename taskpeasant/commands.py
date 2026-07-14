@@ -107,17 +107,29 @@ def _resolve_depends(tasks: list[Task], target: Task, spec: str) -> tuple:
 
 def cmd_add(yaml_path: str, description: str, tags: list = None,
             due: str = "", scheduled: str = "", wait: str = "",
-            project: str = "", priority: str = "") -> str:
-    """Create a new task. Returns a confirmation string."""
+            project: str = "", priority: str = "",
+            recur: str = "", until: str = "") -> str:
+    """Create a new task. Returns a confirmation string.
+
+    recur (with a due date) stores a recurring TEMPLATE with status
+    "recurring" — callers gate this behind the recurrence=on config.
+    """
     reserved = _reserved_tag(tags)
     if reserved:
         return f"Error: '+{reserved}' is a virtual tag and cannot be added."
+    if recur and not due:
+        return "Error: recur requires a due date"
     tasks    = read_tasks(yaml_path)
     new_uuid = str(_uuid_mod.uuid4())
+    status = "pending"
+    if recur:
+        status = "recurring"
+    elif wait:
+        status = "waiting"
     t = Task(
         uuid        = new_uuid,
         description = description,
-        status      = "waiting" if wait else "pending",
+        status      = status,
         entry       = _now_iso(),
         modified    = _now_iso(),
         tags        = list(tags or []),
@@ -126,11 +138,14 @@ def cmd_add(yaml_path: str, description: str, tags: list = None,
         wait        = wait,
         project     = project,
         priority    = priority,
+        recur       = recur,
+        until       = until,
     )
     tasks.append(t)
     write_tasks(yaml_path, tasks)
     record_undo(yaml_path, "add", [], [t.to_dict()])
-    return f"Created task {new_uuid[:8]}  '{description}'"
+    label = "recurring task" if recur else "task"
+    return f"Created {label} {new_uuid[:8]}  '{description}'"
 
 
 # ── Per-verb field transitions (shared by single-target and bulk paths) ──────
@@ -258,13 +273,15 @@ def _apply_mods(yaml_path: str, tasks: list[Task], t: Task, mods: dict):
             if not val.strip():
                 return "Error: description cannot be blank"
             t.description = val
-        elif key in ("due", "scheduled", "wait"):
+        elif key in ("due", "scheduled", "wait", "until"):
             setattr(t, key, val)
             if key == "wait":
                 if val:
                     t.status = "waiting"
                 elif t.status == "waiting":
                     t.status = "pending"    # cleared wait releases the task
+        elif key in ("recur", "parent", "mask", "imask"):
+            setattr(t, key, str(val))
         elif key == "status":
             if val in ("pending", "completed", "deleted", "waiting"):
                 t.status = val

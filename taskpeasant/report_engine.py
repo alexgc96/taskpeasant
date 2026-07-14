@@ -120,11 +120,11 @@ def _priority_of(t: Task) -> str:
 
 
 def _recur_of(t: Task) -> str:
-    return str(t.udas.get("recur", "") or "")
+    return t.recur or str(t.udas.get("recur", "") or "")
 
 
 def _until_of(t: Task) -> str:
-    return str(t.udas.get("until", "") or "")
+    return t.until or str(t.udas.get("until", "") or "")
 
 
 # spec → callable(task, ctx) -> str

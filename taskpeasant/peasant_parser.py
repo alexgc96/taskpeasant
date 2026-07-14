@@ -182,12 +182,26 @@ def _execute_command(raw: str, yaml_path: str, config: Taskrc = None) -> str:
         else Taskrc()
     conf.update(rc_overrides)
 
+    ctx = _context_read_tokens(conf)
+
+    # Recurrence is opt-in (compat contract §7): synthesize child
+    # instances / expire until-dated tasks before dispatching.
+    if conf.get_bool("recurrence"):
+        from .recurrence import synthesize
+        synthesize(yaml_path, conf)
+
     if not tokens:
         from .report_engine import run_report
         default_report = conf.get("default.command", "list")
         if conf.get(f"report.{default_report}.columns"):
-            return run_report(yaml_path, default_report, [], conf)
-        return _cmd_list(yaml_path, [])
+            return run_report(yaml_path, default_report, ctx, conf)
+        return _cmd_list(yaml_path, ctx)
+
+    # Alias expansion (alias.<name>=<expansion>), first token only like TW.
+    # One level deep — an alias can't expand to another alias.
+    alias = conf.get(f"alias.{tokens[0]}")
+    if alias:
+        tokens = shlex.split(alias) + tokens[1:]
 
     first = tokens[0]
 
@@ -197,6 +211,8 @@ def _execute_command(raw: str, yaml_path: str, config: Taskrc = None) -> str:
         return f"Error: '{_pre['__date_error__']}' is not a recognised date. Try: today, +3d, eom, monday, YYYY-MM-DD"
 
     # ── Configuration commands ───────────────────────────────────────────────
+    if first == "context":
+        return _cmd_context(conf, tokens[1:])
     if first == "show":
         return _cmd_show(conf, " ".join(tokens[1:]))
     if first == "config":
@@ -207,6 +223,9 @@ def _execute_command(raw: str, yaml_path: str, config: Taskrc = None) -> str:
     if first == "columns":
         from .report_engine import list_columns
         return list_columns()
+    if first == "colors":
+        from ._colors import cmd_colors
+        return cmd_colors(conf)
 
     # ── Graphical / aggregate reports ─────────────────────────────────────────
     base, _, sub = first.partition(".")
@@ -240,11 +259,11 @@ def _execute_command(raw: str, yaml_path: str, config: Taskrc = None) -> str:
         return cmd_udas(read_tasks(yaml_path), conf)
     if first in ("ids", "uuids", "_ids", "_uuids", "_projects", "_tags",
                  "_commands"):
-        return _cmd_helpers(yaml_path, first, tokens[1:], conf)
+        return _cmd_helpers(yaml_path, first, ctx + tokens[1:], conf)
     if first == "_get":
         return _cmd_get(yaml_path, tokens[1:])
     if first == "count":
-        return _cmd_count(yaml_path, tokens[1:])
+        return _cmd_count(yaml_path, ctx + tokens[1:])
 
     # ── Lifecycle commands ────────────────────────────────────────────────────
     if first == "undo":
@@ -282,9 +301,30 @@ def _execute_command(raw: str, yaml_path: str, config: Taskrc = None) -> str:
         project   = mods.pop("project", "")
         wait      = mods.pop("wait", "")
         priority  = mods.pop("priority", "").upper()
+        recur     = mods.pop("recur", "")
+        until     = mods.pop("until", "")
+        if recur:
+            if not conf.get_bool("recurrence"):
+                return ("Error: recurrence is disabled. Enable it with "
+                        "recurrence=on (or rc.recurrence=on) — see "
+                        "docs/BACKWARDS_COMPAT.md before turning it on "
+                        "for an embedded host.")
+            from .recurrence import parse_recur, is_weekdays
+            if parse_recur(recur) is None and not is_weekdays(recur):
+                return (f"Error: '{recur}' is not a recognised recurrence. "
+                        "Try: daily, weekdays, weekly, monthly, 3d, 2w, 1m")
+            if not due:
+                return "Error: recur requires a due date"
+        # Active context write-defaults (tags/project)
+        ctx_mods = _context_write_mods(conf)
+        for tag in ctx_mods.get("tags", []):
+            if tag not in tags:
+                tags.append(tag)
+        project = project or ctx_mods.get("project", "")
         return commands.cmd_add(yaml_path, desc, tags=tags,
                                 due=due, scheduled=scheduled, wait=wait,
-                                project=project, priority=priority)
+                                project=project, priority=priority,
+                                recur=recur, until=until)
 
     # ── Integer ID → UUID resolution ─────────────────────────────────────────
     if first.isdigit():
@@ -342,7 +382,10 @@ def _execute_command(raw: str, yaml_path: str, config: Taskrc = None) -> str:
         if tok in report_names:
             from .report_engine import run_report
             return run_report(yaml_path, tok,
-                              tokens[:i] + tokens[i + 1:], conf)
+                              ctx + tokens[:i] + tokens[i + 1:], conf)
+        if tok == "count" and i > 0:      # `task <filter> count`
+            return _cmd_count(yaml_path,
+                              ctx + tokens[:i] + tokens[i + 1:])
 
     # ── Bulk: `<filter...> <verb>` — any filter may precede a mutation verb ──
     bulk = _split_bulk(tokens)
@@ -369,14 +412,15 @@ def _execute_command(raw: str, yaml_path: str, config: Taskrc = None) -> str:
     # ── 'export' or implicit list with filter tokens ──────────────────────────
     filter_tokens = [t for t in tokens if t != "export"]
     if "export" in tokens:
-        return _cmd_export_text(yaml_path, filter_tokens)
+        return _cmd_export_text(yaml_path, ctx + filter_tokens)
 
     # ── Default: implicit list via the report engine (default.command) ───────
     from .report_engine import run_report
     default_report = conf.get("default.command", "list")
     if default_report in report_names:
-        return run_report(yaml_path, default_report, filter_tokens, conf)
-    return _cmd_list(yaml_path, filter_tokens)
+        return run_report(yaml_path, default_report, ctx + filter_tokens,
+                          conf)
+    return _cmd_list(yaml_path, ctx + filter_tokens)
 
 
 # ── Filter / helper commands ──────────────────────────────────────────────────
@@ -455,6 +499,90 @@ def _cmd_get(yaml_path: str, args: list) -> str:
     if attr == "urgency":
         return str(compute_urgency(task))
     return _attr_str(task, attr)
+
+
+# ── Context (TW `task context ...`) ──────────────────────────────────────────
+
+def _context_read_tokens(conf: Taskrc) -> list:
+    """Filter tokens of the active context ([] when none)."""
+    name = conf.get("context", "")
+    if not name:
+        return []
+    spec = conf.get(f"context.{name}.read") or conf.get(f"context.{name}")
+    try:
+        return shlex.split(spec) if spec else []
+    except ValueError:
+        return []
+
+
+def _context_write_mods(conf: Taskrc) -> dict:
+    """Defaults the active context imposes on `add` (tags/project only)."""
+    name = conf.get("context", "")
+    if not name:
+        return {}
+    spec = conf.get(f"context.{name}.write") or conf.get(f"context.{name}")
+    mods: dict = {}
+    try:
+        tokens = shlex.split(spec) if spec else []
+    except ValueError:
+        return {}
+    for tok in tokens:
+        if tok.startswith("+") and len(tok) > 1:
+            mods.setdefault("tags", []).append(tok[1:])
+        elif tok.startswith("project:"):
+            mods["project"] = tok[8:]
+    return mods
+
+
+def _cmd_context(conf: Taskrc, args: list) -> str:
+    """define / delete / list / show / none / <name>."""
+    rc_path = conf.source_path or default_taskrc_write_path()
+
+    if not args or args[0] == "show":
+        name = conf.get("context", "")
+        if not name:
+            return "No context is currently applied."
+        spec = conf.get(f"context.{name}.read") or conf.get(f"context.{name}")
+        return f"Context '{name}' with filter '{spec}' is currently applied."
+
+    sub = args[0]
+    if sub == "define":
+        if len(args) < 3:
+            return "Usage: task context define <name> <filter>"
+        name, spec = args[1], " ".join(args[2:])
+        write_taskrc_value(rc_path, f"context.{name}", spec)
+        return f"Context '{name}' defined ({spec})."
+    if sub == "delete":
+        if len(args) < 2:
+            return "Usage: task context delete <name>"
+        name = args[1]
+        for key in (f"context.{name}", f"context.{name}.read",
+                    f"context.{name}.write"):
+            if conf.has(key):
+                write_taskrc_value(rc_path, key, None)
+        if conf.get("context") == name:
+            write_taskrc_value(rc_path, "context", None)
+        return f"Context '{name}' deleted."
+    if sub == "list":
+        names = sorted({k.split(".")[0] for k in conf.subtree("context.")})
+        if not names:
+            return "No contexts defined."
+        active = conf.get("context", "")
+        lines = ["Contexts:"]
+        for n in names:
+            spec = conf.get(f"context.{n}.read") or conf.get(f"context.{n}")
+            marker = " (active)" if n == active else ""
+            lines.append(f"  {n}: {spec}{marker}")
+        return "\n".join(lines)
+    if sub == "none":
+        write_taskrc_value(rc_path, "context", None)
+        return "Context unset."
+
+    # `task context <name>` — activate
+    if conf.get(f"context.{sub}") or conf.get(f"context.{sub}.read"):
+        write_taskrc_value(rc_path, "context", sub)
+        return f"Context '{sub}' set."
+    return f"Context '{sub}' not defined."
 
 
 # ── Configuration commands ────────────────────────────────────────────────────

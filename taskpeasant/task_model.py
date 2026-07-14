@@ -22,9 +22,15 @@ _KNOWN_FIELDS = frozenset([
     "uuid", "description", "status", "entry", "start", "end",
     "due", "scheduled", "wait", "modified", "tags", "depends", "annotations",
     "urgency", "project", "priority",
+    "recur", "until", "parent", "mask", "imask",
 ])
 
 _VALID_STATUSES = frozenset(["pending", "completed", "deleted", "waiting"])
+
+# Statuses accepted on read but NOT part of the frozen contract enum.
+# "recurring" only ever appears in a file when the host opted in via the
+# `recurrence=on` config (see docs/BACKWARDS_COMPAT.md §7).
+_EXTENDED_STATUSES = frozenset(["recurring"])
 
 
 def _now_tw() -> str:
@@ -100,6 +106,13 @@ class Task:
     project:  str = ""   # TW-compatible project name
     priority: str = ""   # H | M | L  (Taskwarrior priority values)
 
+    # Recurrence (only populated when the host opts in via recurrence=on)
+    recur:  str = ""     # duration: weekly, 3d, monthly, ...
+    until:  str = ""     # ISO date — stop recurring / expire after this
+    parent: str = ""     # uuid of the recurring template (children only)
+    mask:   str = ""     # per-child status chars on the template
+    imask:  str = ""     # child index into the parent's mask
+
     # Any non-standard keys land here — preserved on round-trip
     udas: dict = field(default_factory=dict)
 
@@ -130,6 +143,10 @@ class Task:
             d["project"] = self.project
         if self.priority:
             d["priority"] = self.priority
+        for key in ("recur", "until", "parent", "mask", "imask"):
+            v = getattr(self, key)
+            if v != "":
+                d[key] = v
         if self.tags:
             d["tags"] = list(self.tags)
         if self.depends:
@@ -184,9 +201,19 @@ class Task:
             annotations = list(known.get("annotations") or []),
             project     = str(known.get("project") or ""),
             priority    = str(known.get("priority") or ""),
+            recur       = str(known.get("recur") or ""),
+            until       = str(known.get("until") or ""),
+            parent      = str(known.get("parent") or ""),
+            mask        = str(known.get("mask") or ""),
+            imask       = ("" if known.get("imask") is None
+                           else str(known.get("imask"))),
             udas        = udas,
         )
-        if t.status not in _VALID_STATUSES:
+        # Contract §7: unknown statuses coerce to pending.  The one
+        # exception is an opt-in recurring TEMPLATE, which always carries
+        # a recur duration; a bare "recurring" status stays coerced.
+        if t.status not in _VALID_STATUSES and not (
+                t.status in _EXTENDED_STATUSES and t.recur):
             t.status = "pending"
         return t
 
@@ -213,6 +240,19 @@ class Task:
             d["project"] = self.project
         if self.priority:
             d["priority"] = self.priority
+        if self.recur:
+            d["recur"] = self.recur
+        if self.until:
+            d["until"] = _iso_to_tw(self.until)
+        if self.parent:
+            d["parent"] = self.parent
+        if self.mask:
+            d["mask"] = self.mask
+        if self.imask != "":
+            try:
+                d["imask"] = int(self.imask)
+            except ValueError:
+                pass
         if self.tags:
             d["tags"] = list(self.tags)
         if self.depends:

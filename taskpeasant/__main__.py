@@ -231,10 +231,16 @@ def _main() -> None:
     conf = load_taskrc(alt_rc or None)
     conf.update(rc_overrides)
 
+    # Opt-in recurrence: materialise children before any display command
+    if conf.get_bool("recurrence"):
+        from .recurrence import synthesize
+        synthesize(yaml_path, conf)
+
     first = tokens[0] if tokens else ""
 
     # ── Plain-text commands (config, aggregates, helpers) ────────────────────
-    _plain_cmds = {"show", "config", "reports", "columns", "summary", "stats",
+    _plain_cmds = {"show", "config", "context", "reports", "columns",
+                   "colors", "summary", "stats",
                    "timesheet", "projects", "tags", "udas", "ids", "uuids",
                    "_ids", "_uuids", "_projects", "_tags", "_commands",
                    "_get", "count"}
@@ -249,10 +255,13 @@ def _main() -> None:
         return
 
     # ── Display commands → rich renderers ────────────────────────────────────
+    from .peasant_parser import _context_read_tokens
     report_names = set(conf.report_names())
+    ctx = _context_read_tokens(conf)
 
     if not first:
-        _rich_report(yaml_path, conf.get("default.command", "list"), [], conf)
+        _rich_report(yaml_path, conf.get("default.command", "list"), ctx,
+                     conf)
         return
 
     if first == "history":
@@ -274,7 +283,8 @@ def _main() -> None:
     # ── Report engine: `task [filter] <report> [filter]` ─────────────────────
     for i, tok in enumerate(tokens):
         if tok in report_names:
-            _rich_report(yaml_path, tok, tokens[:i] + tokens[i + 1:], conf)
+            _rich_report(yaml_path, tok, ctx + tokens[:i] + tokens[i + 1:],
+                         conf)
             return
 
     # ── Lifecycle commands routed straight through execute_command ───────────
@@ -361,7 +371,8 @@ def _main() -> None:
         return
 
     # Fallback: treat as filter → default report
-    _rich_report(yaml_path, conf.get("default.command", "list"), tokens, conf)
+    _rich_report(yaml_path, conf.get("default.command", "list"),
+                 ctx + tokens, conf)
 
 
 if __name__ == "__main__":

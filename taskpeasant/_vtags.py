@@ -72,9 +72,9 @@ def compute_virtual_tags(
         vtags.add("PRIORITY")
     if task.udas:
         vtags.add("UDA")
-    if task.udas.get("until"):
+    if task.until:
         vtags.add("UNTIL")
-    if task.udas.get("recur"):
+    if task.recur:
         vtags.add("PARENT" if task.status == "recurring" else "CHILD")
 
     if task.status in _OPEN:

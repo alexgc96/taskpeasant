@@ -56,7 +56,8 @@ _FIELD_KEYS = frozenset(["description", "status", "depends", "priority", "projec
 
 # Verbs that may follow a filter expression: `task +urgent done`
 _MUTATION_VERBS = frozenset(["done", "delete", "start", "stop",
-                             "modify", "annotate"])
+                             "modify", "annotate", "duplicate", "purge",
+                             "append", "prepend", "denotate"])
 
 
 def _split_bulk(tokens: list):
@@ -245,6 +246,29 @@ def _execute_command(raw: str, yaml_path: str, config: Taskrc = None) -> str:
     if first == "count":
         return _cmd_count(yaml_path, tokens[1:])
 
+    # ── Lifecycle commands ────────────────────────────────────────────────────
+    if first == "undo":
+        from .undo import cmd_undo
+        return cmd_undo(yaml_path)
+    if first == "version":
+        from . import __version__
+        return f"taskpeasant {__version__}"
+    if first == "purge" and len(tokens) == 1:
+        return commands.cmd_purge(yaml_path)
+    if first == "import":
+        idx = raw.find("import")
+        return commands.cmd_import(yaml_path, raw[idx + len("import"):])
+    if first == "log":
+        rest = tokens[1:]
+        mods = _parse_mod_tokens(rest)
+        desc = mods.pop("description", "").strip()
+        if not desc:
+            return "Error: description is required for 'log'"
+        return commands.cmd_log(yaml_path, desc,
+                                tags=mods.pop("tags_add", []),
+                                project=mods.pop("project", ""),
+                                priority=mods.pop("priority", "").upper())
+
     # ── 'add' command ────────────────────────────────────────────────────────
     if first == "add":
         rest = tokens[1:]
@@ -289,6 +313,19 @@ def _execute_command(raw: str, yaml_path: str, config: Taskrc = None) -> str:
             if not note:
                 return "Error: annotation text required"
             return commands.cmd_annotate(yaml_path, uuid_prefix, note)
+        if verb == "duplicate":
+            return commands.cmd_duplicate(yaml_path, uuid_prefix)
+        if verb == "purge":
+            return commands.cmd_purge(yaml_path, uuid_prefix)
+        if verb == "append":
+            return commands.cmd_append(yaml_path, uuid_prefix,
+                                       " ".join(rest))
+        if verb == "prepend":
+            return commands.cmd_prepend(yaml_path, uuid_prefix,
+                                        " ".join(rest))
+        if verb == "denotate":
+            return commands.cmd_denotate(yaml_path, uuid_prefix,
+                                         " ".join(rest))
         if verb == "modify":
             mods = _parse_mod_tokens(rest)
             if not mods:
@@ -311,13 +348,17 @@ def _execute_command(raw: str, yaml_path: str, config: Taskrc = None) -> str:
     bulk = _split_bulk(tokens)
     if bulk:
         filter_tokens, verb, rest = bulk
-        if verb in ("done", "delete", "start", "stop") and rest:
+        if verb in ("done", "delete", "start", "stop", "duplicate",
+                    "purge") and rest:
             return f"Error: unexpected arguments after '{verb}'"
         if verb == "annotate":
             note = " ".join(rest)
             if not note:
                 return "Error: annotation text required"
             return commands.cmd_bulk(yaml_path, filter_tokens, verb, note=note)
+        if verb in ("append", "prepend", "denotate"):
+            return commands.cmd_bulk(yaml_path, filter_tokens, verb,
+                                     note=" ".join(rest))
         if verb == "modify":
             mods = _parse_mod_tokens(rest)
             if not mods:

@@ -20,9 +20,10 @@ import uuid as _uuid_mod
 from datetime import datetime, timezone
 from typing import Optional
 
-from .task_model import Task
+from .task_model import Task, _tw_to_iso
 from .storage import read_tasks, write_tasks, assign_ids
 from .query import apply_filter
+from .undo import record_undo
 from ._vtags import VIRTUAL_TAG_NAMES
 
 
@@ -128,6 +129,7 @@ def cmd_add(yaml_path: str, description: str, tags: list = None,
     )
     tasks.append(t)
     write_tasks(yaml_path, tasks)
+    record_undo(yaml_path, "add", [], [t.to_dict()])
     return f"Created task {new_uuid[:8]}  '{description}'"
 
 
@@ -174,9 +176,11 @@ def cmd_done(yaml_path: str, uuid_prefix: str) -> str:
     t     = _find_one(tasks, uuid_prefix)
     if not t:
         return f"No task matching '{uuid_prefix}'"
+    before = [t.to_dict()]
     if not _apply_done(t):
         return f"Task {t.uuid[:8]} is already completed."
     write_tasks(yaml_path, tasks)
+    record_undo(yaml_path, "done", before, [t.to_dict()])
     return f"Completed task {t.uuid[:8]}  '{t.description}'"
 
 
@@ -188,9 +192,11 @@ def cmd_delete(yaml_path: str, uuid_prefix: str) -> str:
     t     = _find_one(tasks, uuid_prefix)
     if not t:
         return f"No task matching '{uuid_prefix}'"
+    before = [t.to_dict()]
     if not _apply_delete(t):
         return f"Task {t.uuid[:8]} is already deleted."
     write_tasks(yaml_path, tasks)
+    record_undo(yaml_path, "delete", before, [t.to_dict()])
     return f"Deleted task {t.uuid[:8]}  '{t.description}'"
 
 
@@ -202,9 +208,11 @@ def cmd_start(yaml_path: str, uuid_prefix: str) -> str:
     t     = _find_one(tasks, uuid_prefix)
     if not t:
         return f"No task matching '{uuid_prefix}'"
+    before = [t.to_dict()]
     if not _apply_start(t):
         return f"Task {t.uuid[:8]} is already active."
     write_tasks(yaml_path, tasks)
+    record_undo(yaml_path, "start", before, [t.to_dict()])
     return f"Started task {t.uuid[:8]}  '{t.description}'"
 
 
@@ -214,8 +222,10 @@ def cmd_stop(yaml_path: str, uuid_prefix: str) -> str:
     t     = _find_one(tasks, uuid_prefix)
     if not t:
         return f"No task matching '{uuid_prefix}'"
+    before = [t.to_dict()]
     _apply_stop(t)
     write_tasks(yaml_path, tasks)
+    record_undo(yaml_path, "stop", before, [t.to_dict()])
     return f"Stopped task {t.uuid[:8]}  '{t.description}'"
 
 
@@ -227,9 +237,11 @@ def cmd_annotate(yaml_path: str, uuid_prefix: str, note: str) -> str:
     t     = _find_one(tasks, uuid_prefix)
     if not t:
         return f"No task matching '{uuid_prefix}'"
+    before = [t.to_dict()]
     t.annotations.append({"entry": _now_iso(), "description": note})
     t.modified = _now_iso()
     write_tasks(yaml_path, tasks)
+    record_undo(yaml_path, "annotate", before, [t.to_dict()])
     return f"Annotated task {t.uuid[:8]}."
 
 
@@ -303,22 +315,29 @@ def cmd_modify(yaml_path: str, uuid_prefix: str, mods: dict) -> str:
     if not t:
         return f"No task matching '{uuid_prefix}'"
 
+    before = [t.to_dict()]
     err = _apply_mods(yaml_path, tasks, t, mods)
     if err:
         return err
     write_tasks(yaml_path, tasks)
+    record_undo(yaml_path, "modify", before, [t.to_dict()])
     return f"Modified task {t.uuid[:8]}  '{t.description}'"
 
 
 # ── bulk (filter-targeted mutations: `task +urgent done`) ────────────────────
 
 _BULK_LABELS = {
-    "done":     "Completed",
-    "delete":   "Deleted",
-    "start":    "Started",
-    "stop":     "Stopped",
-    "modify":   "Modified",
-    "annotate": "Annotated",
+    "done":      "Completed",
+    "delete":    "Deleted",
+    "start":     "Started",
+    "stop":      "Stopped",
+    "modify":    "Modified",
+    "annotate":  "Annotated",
+    "duplicate": "Duplicated",
+    "purge":     "Purged",
+    "append":    "Appended to",
+    "prepend":   "Prepended to",
+    "denotate":  "Denotated",
 }
 
 
@@ -353,7 +372,10 @@ def cmd_bulk(yaml_path: str, filter_tokens: list, verb: str,
         return "No matching tasks."
 
     applied: list = []
+    created: list = []      # new tasks from bulk duplicate
+    purged:  list = []      # snapshots of permanently removed tasks
     skipped = 0
+    before = {t.uuid: t.to_dict() for t in matches}
 
     if verb == "modify":
         if not mods:
@@ -371,6 +393,35 @@ def cmd_bulk(yaml_path: str, filter_tokens: list, verb: str,
             t.annotations.append({"entry": _now_iso(), "description": note})
             t.modified = _now_iso()
         applied = matches
+    elif verb in ("append", "prepend"):
+        if not note.strip():
+            return f"Error: text required for '{verb}'"
+        for t in matches:
+            t.description = (f"{t.description} {note}" if verb == "append"
+                             else f"{note} {t.description}")
+            t.modified = _now_iso()
+        applied = matches
+    elif verb == "denotate":
+        for t in matches:
+            if _apply_denotate(t, note):
+                applied.append(t)
+            else:
+                skipped += 1
+    elif verb == "duplicate":
+        for t in matches:
+            dup = _duplicate_of(t)
+            created.append(dup)
+            applied.append(t)
+        tasks.extend(created)
+    elif verb == "purge":
+        for t in matches:
+            if t.status == "deleted":
+                purged.append(t)
+                applied.append(t)
+            else:
+                skipped += 1
+        purged_uuids = {t.uuid for t in purged}
+        tasks = [t for t in tasks if t.uuid not in purged_uuids]
     else:
         apply_fn = {"done": _apply_done, "delete": _apply_delete,
                     "start": _apply_start, "stop": _apply_stop}[verb]
@@ -386,12 +437,236 @@ def cmd_bulk(yaml_path: str, filter_tokens: list, verb: str,
         return f"{label} 0 tasks{skip_str}."
 
     write_tasks(yaml_path, tasks)
+    if verb == "purge":
+        record_undo(yaml_path, "purge",
+                    [before[t.uuid] for t in applied], [])
+    elif verb == "duplicate":
+        record_undo(yaml_path, "duplicate", [],
+                    [t.to_dict() for t in created])
+    else:
+        record_undo(yaml_path, verb,
+                    [before[t.uuid] for t in applied],
+                    [t.to_dict() for t in applied])
     lines = [f"{label} {len(applied)} task(s){skip_str}:"]
     for t in applied[:10]:
         lines.append(f"  {t.uuid[:8]}  '{t.description}'")
     if len(applied) > 10:
         lines.append(f"  ... and {len(applied) - 10} more")
     return "\n".join(lines)
+
+
+# ── duplicate / purge / log / append / prepend / denotate / import ──────────
+
+def _duplicate_of(t: Task) -> Task:
+    """A fresh pending copy of a task (TW `duplicate` semantics: new uuid,
+    entry=now, status/start/end reset, everything else carried over)."""
+    return Task(
+        uuid        = str(_uuid_mod.uuid4()),
+        description = t.description,
+        status      = "waiting" if t.wait else "pending",
+        entry       = _now_iso(),
+        modified    = _now_iso(),
+        due         = t.due,
+        scheduled   = t.scheduled,
+        wait        = t.wait,
+        tags        = list(t.tags),
+        depends     = list(t.depends),
+        annotations = [dict(a) for a in t.annotations],
+        project     = t.project,
+        priority    = t.priority,
+        udas        = dict(t.udas),
+    )
+
+
+def _apply_denotate(t: Task, pattern: str) -> bool:
+    """Remove matching annotations (all of them when pattern is empty).
+    Returns True when at least one was removed."""
+    if not t.annotations:
+        return False
+    if not pattern.strip():
+        t.annotations = []
+        t.modified = _now_iso()
+        return True
+    p = pattern.lower()
+    for i, a in enumerate(t.annotations):
+        if p in str(a.get("description", "")).lower():
+            del t.annotations[i]
+            t.modified = _now_iso()
+            return True
+    return False
+
+
+def cmd_duplicate(yaml_path: str, uuid_prefix: str) -> str:
+    """Create a pending copy of a task."""
+    tasks = read_tasks(yaml_path)
+    t     = _find_one(tasks, uuid_prefix)
+    if not t:
+        return f"No task matching '{uuid_prefix}'"
+    dup = _duplicate_of(t)
+    tasks.append(dup)
+    write_tasks(yaml_path, tasks)
+    record_undo(yaml_path, "duplicate", [], [dup.to_dict()])
+    return (f"Duplicated task {t.uuid[:8]} → {dup.uuid[:8]}  "
+            f"'{dup.description}'")
+
+
+def cmd_purge(yaml_path: str, uuid_prefix: str = "") -> str:
+    """Permanently remove deleted tasks (TW `purge`: deleted-only).
+
+    With a uuid_prefix, purge that one task; without, purge every task
+    whose status is deleted.
+    """
+    tasks = read_tasks(yaml_path)
+    if uuid_prefix:
+        t = _find_one(tasks, uuid_prefix)
+        if not t:
+            return f"No task matching '{uuid_prefix}'"
+        if t.status != "deleted":
+            return (f"Task {t.uuid[:8]} is not deleted — delete it first, "
+                    "purge only removes deleted tasks.")
+        victims = [t]
+    else:
+        victims = [t for t in tasks if t.status == "deleted"]
+        if not victims:
+            return "No deleted tasks to purge."
+
+    victim_uuids = {t.uuid for t in victims}
+    remaining = [t for t in tasks if t.uuid not in victim_uuids]
+    # Drop dangling dependency references (TW does this on purge)
+    for t in remaining:
+        if t.depends:
+            t.depends = [d for d in t.depends if d not in victim_uuids]
+    write_tasks(yaml_path, remaining)
+    record_undo(yaml_path, "purge", [t.to_dict() for t in victims], [])
+    n = len(victims)
+    return f"Purged {n} task{'s' if n != 1 else ''}."
+
+
+def cmd_log(yaml_path: str, description: str, tags: list = None,
+            project: str = "", priority: str = "") -> str:
+    """Record an already-completed task (TW `log`)."""
+    reserved = _reserved_tag(tags)
+    if reserved:
+        return f"Error: '+{reserved}' is a virtual tag and cannot be added."
+    tasks = read_tasks(yaml_path)
+    t = Task(
+        uuid        = str(_uuid_mod.uuid4()),
+        description = description,
+        status      = "completed",
+        entry       = _now_iso(),
+        end         = _now_iso(),
+        modified    = _now_iso(),
+        tags        = list(tags or []),
+        project     = project,
+        priority    = priority,
+    )
+    tasks.append(t)
+    write_tasks(yaml_path, tasks)
+    record_undo(yaml_path, "log", [], [t.to_dict()])
+    return f"Logged task {t.uuid[:8]}  '{description}'"
+
+
+def _cmd_text_edit(yaml_path: str, uuid_prefix: str, text: str,
+                   op: str) -> str:
+    """Shared body for append/prepend."""
+    if not text.strip():
+        return f"Error: text required for '{op}'"
+    tasks = read_tasks(yaml_path)
+    t     = _find_one(tasks, uuid_prefix)
+    if not t:
+        return f"No task matching '{uuid_prefix}'"
+    before = [t.to_dict()]
+    t.description = (f"{t.description} {text}" if op == "append"
+                     else f"{text} {t.description}")
+    t.modified = _now_iso()
+    write_tasks(yaml_path, tasks)
+    record_undo(yaml_path, op, before, [t.to_dict()])
+    return (f"{'Appended to' if op == 'append' else 'Prepended to'} task "
+            f"{t.uuid[:8]}  '{t.description}'")
+
+
+def cmd_append(yaml_path: str, uuid_prefix: str, text: str) -> str:
+    """Append text to a task description."""
+    return _cmd_text_edit(yaml_path, uuid_prefix, text, "append")
+
+
+def cmd_prepend(yaml_path: str, uuid_prefix: str, text: str) -> str:
+    """Prepend text to a task description."""
+    return _cmd_text_edit(yaml_path, uuid_prefix, text, "prepend")
+
+
+def cmd_denotate(yaml_path: str, uuid_prefix: str, pattern: str = "") -> str:
+    """Remove an annotation matching pattern (all when no pattern)."""
+    tasks = read_tasks(yaml_path)
+    t     = _find_one(tasks, uuid_prefix)
+    if not t:
+        return f"No task matching '{uuid_prefix}'"
+    before = [t.to_dict()]
+    if not _apply_denotate(t, pattern):
+        return (f"Task {t.uuid[:8]} has no annotation matching '{pattern}'"
+                if pattern else f"Task {t.uuid[:8]} has no annotations.")
+    write_tasks(yaml_path, tasks)
+    record_undo(yaml_path, "denotate", before, [t.to_dict()])
+    return f"Denotated task {t.uuid[:8]}."
+
+
+_WIRE_DATE_KEYS = ("entry", "start", "end", "due", "scheduled", "wait",
+                   "until", "modified")
+
+
+def cmd_import(yaml_path: str, json_text: str) -> str:
+    """Import TW-export JSON (array, single object, or one object per
+    line).  Tasks merge by uuid: existing are updated, new appended."""
+    import json as _json
+
+    text = (json_text or "").strip()
+    if not text:
+        return "Error: no JSON provided to import"
+
+    try:
+        data = _json.loads(text)
+        records = data if isinstance(data, list) else [data]
+    except ValueError:
+        # TW also emits one JSON object per line
+        try:
+            records = [_json.loads(line) for line in text.splitlines()
+                       if line.strip().strip(",")]
+        except ValueError as e:
+            return f"Error: invalid JSON — {e}"
+
+    tasks = read_tasks(yaml_path)
+    by_uuid = {t.uuid: i for i, t in enumerate(tasks)}
+    before, after = [], []
+    added = updated = 0
+
+    for rec in records:
+        if not isinstance(rec, dict) or not rec.get("description"):
+            continue
+        rec = dict(rec)
+        for k in ("id", "urgency", "is_active"):      # computed fields
+            rec.pop(k, None)
+        for k in _WIRE_DATE_KEYS:                     # wire → ISO storage
+            if rec.get(k):
+                rec[k] = _tw_to_iso(str(rec[k]))
+        t = Task.from_dict(rec)
+        if t.uuid in by_uuid:
+            before.append(tasks[by_uuid[t.uuid]].to_dict())
+            tasks[by_uuid[t.uuid]] = t
+            updated += 1
+        else:
+            tasks.append(t)
+            by_uuid[t.uuid] = len(tasks) - 1
+            added += 1
+        after.append(t.to_dict())
+
+    if not after:
+        return "Error: no importable tasks found in JSON"
+
+    write_tasks(yaml_path, tasks)
+    record_undo(yaml_path, "import", before, after)
+    return (f"Imported {added + updated} task"
+            f"{'s' if added + updated != 1 else ''} "
+            f"({added} new, {updated} updated).")
 
 
 # ── export (used by Flask API routes) ────────────────────────────────────────

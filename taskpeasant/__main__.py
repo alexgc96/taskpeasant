@@ -107,6 +107,75 @@ def _rich_calendar(yaml_path: str) -> None:
     console.print(R.render_calendar(tasks))
 
 
+_EDIT_FIELDS = ("description", "project", "priority", "status", "due",
+                "scheduled", "wait", "tags", "depends")
+
+
+def _cli_edit(yaml_path: str, uuid_prefix: str) -> None:
+    """`task <id> edit` — round-trip one task through $EDITOR as YAML."""
+    import subprocess
+    import tempfile
+
+    import yaml as _yaml
+
+    from .storage import write_tasks
+    from .undo import record_undo
+
+    tasks = read_tasks(yaml_path)
+    assign_ids(yaml_path, tasks)
+    prefix = uuid_prefix.lower()
+    matches = [t for t in tasks if t.uuid.lower().startswith(prefix)]
+    if len(matches) != 1:
+        console.print(R.error(f"No task matching '{uuid_prefix}'"))
+        return
+    t = matches[0]
+    before = [t.to_dict()]
+
+    editable = {k: getattr(t, k) for k in _EDIT_FIELDS}
+    editable.update(t.udas)
+    header = (f"# Editing task {t.uuid}\n"
+              "# Save and quit to apply; empty a value to clear it.\n")
+    with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False,
+                                     encoding="utf-8") as f:
+        f.write(header + _yaml.dump(editable, default_flow_style=False,
+                                    sort_keys=False, allow_unicode=True))
+        tmp = f.name
+
+    editor = os.environ.get("VISUAL") or os.environ.get("EDITOR") or "vi"
+    try:
+        subprocess.call([editor, tmp])
+        edited = _yaml.safe_load(open(tmp, encoding="utf-8").read())
+    except Exception as e:
+        console.print(R.error(f"Edit failed: {e}"))
+        return
+    finally:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+
+    if not isinstance(edited, dict) or not str(
+            edited.get("description", "")).strip():
+        console.print(R.error("Edit aborted — description cannot be empty."))
+        return
+
+    for k in _EDIT_FIELDS:
+        if k in ("tags", "depends"):
+            v = edited.get(k) or []
+            setattr(t, k, [str(x) for x in v] if isinstance(v, list)
+                    else [s.strip() for s in str(v).split(",") if s.strip()])
+        else:
+            setattr(t, k, str(edited.get(k) or ""))
+    known = set(_EDIT_FIELDS)
+    t.udas = {k: v for k, v in edited.items()
+              if k not in known and v not in (None, "")}
+    from .commands import _now_iso
+    t.modified = _now_iso()
+    write_tasks(yaml_path, tasks)
+    record_undo(yaml_path, "edit", before, [t.to_dict()])
+    console.print(R.confirm(f"Edited task {t.uuid[:8]}  '{t.description}'"))
+
+
 def main() -> None:
     try:
         _main()
@@ -208,6 +277,29 @@ def _main() -> None:
             _rich_report(yaml_path, tok, tokens[:i] + tokens[i + 1:], conf)
             return
 
+    # ── Lifecycle commands routed straight through execute_command ───────────
+    if first in ("undo", "log", "version") or \
+            (first == "purge" and len(tokens) == 1):
+        raw = "task " + " ".join(shlex.quote(t) for t in tokens)
+        result = execute_command(raw, yaml_path, config=conf)
+        if result.startswith("Error") or result.startswith("No "):
+            console.print(R.error(result))
+        else:
+            console.print(R.confirm(result))
+        return
+
+    if first == "import":
+        # tp import <file.json> — or JSON inline
+        payload = " ".join(tokens[1:])
+        if len(tokens) == 2 and os.path.isfile(tokens[1]):
+            with open(tokens[1], encoding="utf-8") as f:
+                payload = f.read()
+        result = execute_command("task import " + payload, yaml_path,
+                                 config=conf)
+        console.print(R.error(result) if result.startswith("Error")
+                      else R.confirm(result))
+        return
+
     # ── UUID / integer-targeted: info → rich panel ────────────────────────────
     resolved_first = first
     if first.isdigit():
@@ -223,13 +315,18 @@ def _main() -> None:
         if verb == "info" or (len(tokens) == 1 and _is_uuid(resolved_first)):
             _rich_info(yaml_path, resolved_first)
             return
+        if verb == "edit":
+            _cli_edit(yaml_path, resolved_first)
+            return
 
     # ── Default: implicit list with filter tokens (no verb match) ────────────
     # If none of the above matched, check if it looks like filter tokens
     # and route to rich list; otherwise fall through to plain execute_command
     # for mutation verbs (add, done, delete, start, stop, annotate, modify).
     mutation_verbs = frozenset(["add", "done", "delete", "start", "stop",
-                                 "annotate", "modify", "export", "count"])
+                                 "annotate", "modify", "export", "count",
+                                 "duplicate", "purge", "append", "prepend",
+                                 "denotate"])
     second = tokens[1].lower() if len(tokens) > 1 else ""
 
     # Bulk detection: a filter expression followed by a mutation verb.

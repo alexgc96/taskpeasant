@@ -34,6 +34,7 @@ scratch/
 tmp/
 *.local.yaml
 tasks.yaml
+tasks.yaml.undo
 .claude/
 package.json
 package-lock.json

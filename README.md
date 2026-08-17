@@ -1,5 +1,7 @@
 # taskpeasant
 
+![taskpeasant logo](https://raw.githubusercontent.com/alexgc96/taskpeasant/main/assets/taskpeasant-logo.png)
+
 > **Taskwarrior logic, ported to Python — as close as we could get.**
 > A YAML-native, pure-Python task engine for local-first apps and platforms where the Taskwarrior binary is unavailable (e.g. native Windows).
 

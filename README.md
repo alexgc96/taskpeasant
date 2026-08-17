@@ -115,3 +115,13 @@ Beta. The public API and storage contract are frozen (see `docs/BACKWARDS_COMPAT
 ## License
 
 GPL-3.0-or-later. See [LICENSE](LICENSE).
+
+
+
+## Coffee and contributing 
+
+I maintain this repo completely for fun and will continue to build it out, I would never say no to coffee though! ;)
+
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-F16061?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/alexgc)
+
+The best way to help the repo though is *contributing* every issue, pr and snippet is very welcome! [Read the contribution guide for the detailsss](CONTRIBUTING.md)

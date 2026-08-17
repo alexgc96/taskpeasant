@@ -1,0 +1,93 @@
+# Contributing to TaskPeasant
+
+TaskPeasant is a pure-Python port of Taskwarrior's logic — YAML-native, local-first, GPL-3.0-or-later. Before touching anything, read [`docs/BACKWARDS_COMPAT.md`](docs/BACKWARDS_COMPAT.md). It defines what is frozen and what isn't, and violations require a MAJOR version bump.
+
+---
+
+## Dev setup
+
+```bash
+git clone https://github.com/alexgc96/taskpeasant
+cd taskpeasant
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
+pytest -q
+```
+
+All tests must pass before you open a PR.
+
+---
+
+## The backwards-compat contract
+
+[`docs/BACKWARDS_COMPAT.md`](docs/BACKWARDS_COMPAT.md) defines seven frozen sections. The short version:
+
+- **§1 — Public symbols**: the 13 named exports in `__init__.py` cannot be renamed or have their positional parameters reordered. Adding new *optional keyword* parameters is fine.
+- **§2 — Storage key**: `taskpeasant_tasks` is the only top-level YAML key TaskPeasant ever writes. Sibling keys (your app's own data) must never be touched.
+- **§5 — `execute_command`**: must never raise. Any failure is returned as a string message.
+- **§7 — Status enum**: exactly `{"pending", "completed", "deleted", "waiting"}`. Recurrence is opt-in precisely to avoid adding a fifth value.
+
+Anything that breaks these constraints requires a **MAJOR version bump**, a `**BREAKING**` entry in `CHANGELOG.md`, and a migration note in [`docs/integration.md`](docs/integration.md).
+
+`tests/test_compat_contract.py` is the mechanical enforcer — it must stay green on every commit.
+
+**Good place to start:** The "soak time" symbols (`cmd_duplicate`, `cmd_purge`, `cmd_undo`, `Taskrc`, `load_taskrc`, etc.) are stable in intent but not yet frozen in §1. Adding tests or docs for these is a high-value, low-risk contribution.
+
+---
+
+## Running the tests
+
+```bash
+pytest -q            # full suite
+pytest -q tests/test_compat_contract.py   # contract enforcer only
+```
+
+**Key fixtures** (all in `tests/conftest.py`):
+
+| Fixture | What it gives you |
+|---|---|
+| `yaml_file` | Path to a blank temp YAML file |
+| `seeded_yaml` | Path to a pre-populated file with a 6-task canonical graph |
+| `make_task` | In-memory `Task` factory with sensible defaults |
+
+**Patterns used in the suite:**
+
+- Integration-level: call `execute_command()` then verify state with `read_tasks()`. Avoid mocking internals unless you need to assert call counts (see `test_bulk.py` for the one justified exception).
+- `conftest.py` has an `autouse` fixture that clears the ID cache before and after every test. Don't work around it.
+- Use `@pytest.mark.parametrize` for error-path and corpus tests.
+- Module-level helpers (`add()`, `uuid_of()`, `names()`, etc.) are fine per test file to keep bodies terse.
+
+---
+
+## Code style
+
+No linter or formatter is enforced. Match the style of the surrounding code — consistent indentation, similar naming conventions, no line-length heroics.
+
+**Windows:** CI runs `ubuntu-latest` only. If you're on Windows, please run `pytest -q` locally before opening a PR — the project exists specifically because Taskwarrior is awkward on Windows, so Windows bug reports and fixes are especially welcome.
+
+---
+
+## Where to contribute
+
+Check [`docs/sprint.md`](docs/sprint.md) for the current v0.5.0 candidates:
+
+- **Atomic writes** — temp-file + rename in `write_tasks`; a crash mid-write today can truncate the file
+- **Cross-process file locking** — current locking is in-process only
+- **`task sync` stub** — no-op with a clear message, for embedders who might call it
+- **PyPI publish** — first public release prep
+
+The backlog (recurrence catch-up cap) is in the same file.
+
+---
+
+## Submitting changes
+
+1. **Open an issue first** for anything non-trivial — especially anything that touches the public API or storage format.
+2. **One logical change per PR.**
+3. **Tests** — add or update them. `test_compat_contract.py` must stay green.
+4. **Changelog** — add an entry under `[Unreleased]` in `CHANGELOG.md`.
+5. **Docs** — update the relevant doc if your change affects the public surface:
+   - [`docs/api.md`](docs/api.md) for API changes
+   - [`docs/cli.md`](docs/cli.md) for CLI grammar changes
+   - [`docs/parity.md`](docs/parity.md) for new TW-parity features
+6. **Breaking changes** — MAJOR bump in `pyproject.toml` and `taskpeasant/__init__.py`, `**BREAKING**` tag in CHANGELOG, migration note in [`docs/integration.md`](docs/integration.md).

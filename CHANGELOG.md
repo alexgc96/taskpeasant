@@ -210,7 +210,8 @@ Initial extraction from the [analogtrsh Studio OS](https://github.com/alexgc96/a
 - YAML storage under dedicated `taskpeasant_tasks:` key with per-file locking and legacy `tasks:`-as-list fallback.
 - Date aliases: `today`, `tomorrow`, `yesterday`, `eow`, `eom`, weekday names.
 
-[Unreleased]: https://github.com/alexgc96/taskpeasant/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/alexgc96/taskpeasant/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/alexgc96/taskpeasant/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/alexgc96/taskpeasant/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/alexgc96/taskpeasant/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/alexgc96/taskpeasant/releases/tag/v0.1.0

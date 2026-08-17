@@ -319,5 +319,5 @@ output = tp.execute_command("task 1 done", yaml_path)
 
 ```python
 import taskpeasant
-print(taskpeasant.__version__)   # "0.3.0"
+print(taskpeasant.__version__)   # "0.4.0"
 ```

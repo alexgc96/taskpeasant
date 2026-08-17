@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>taskpeasant — Taskwarrior logic, ported to Python</title>
+<meta name="description" content="A YAML-native, pure-Python task engine that re-implements Taskwarrior's data model, CLI grammar, and report engine — for local-first apps where the Taskwarrior binary isn't available.">
+<link rel="icon" href="assets/taskpeasant-logo.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="tp-header">
+  <a class="tp-brand" href="#top">
+    <img src="assets/taskpeasant-logo.png" alt="taskpeasant">
+    <span class="tp-brand-word">TASK<span>PEASANT</span></span>
+  </a>
+  <nav class="tp-nav">
+    <a href="#why">Why</a>
+    <a href="#ports">What it ports</a>
+    <a href="#quickstart">Quickstart</a>
+    <a href="#storage">Storage</a>
+    <a href="#status">Status</a>
+  </nav>
+  <div class="tp-header-cta">
+    <a class="tp-gh-btn" href="https://github.com/alexgc96/taskpeasant" target="_blank" rel="noopener">
+      ★ GitHub
+    </a>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- ───────────── hero ───────────── -->
+  <section class="tp-hero">
+    <div class="tp-hero-inner">
+      <div>
+        <div class="tp-eyebrow">yaml-native · pure python · gpl-3.0-or-later</div>
+        <h1 class="tp-h1">
+          <span class="row">TASK<span class="slash">/</span></span>
+          <span class="row outline">PEASANT</span>
+        </h1>
+        <p class="tp-tagline">
+          <strong>Taskwarrior logic, ported to Python — as close as we could get.</strong>
+          A YAML-native task engine for local-first apps and platforms where the
+          Taskwarrior binary is unavailable — like native Windows.
+        </p>
+        <div class="tp-tags">
+          <span class="tp-tag">no daemon</span>
+          <span class="tp-tag">no database</span>
+          <span class="tp-tag">diffable · git-friendly</span>
+          <span class="tp-tag is-accent">taskwarrior parity</span>
+        </div>
+        <div class="tp-cta-row">
+          <div class="tp-install">
+            <span class="tp-install-prompt">$</span>
+            <code>pipx install taskpeasant</code>
+            <button class="tp-copy-btn" id="copyInstall" data-copy="pip install taskpeasant">copy</button>
+          </div>
+          <a class="tp-btn-outline" href="https://github.com/alexgc96/taskpeasant" target="_blank" rel="noopener">
+            view on github <span class="arr">→</span>
+          </a>
+        </div>
+      </div>
+
+      <div class="tp-plate">
+        <div class="tp-plate-stamp">v0 · beta</div>
+        <img src="assets/taskpeasant-logo.png" alt="taskpeasant mascot — a peasant with a knife and a basket, from a public-domain woodcut">
+        <div class="tp-plate-cap">
+          <span>mascot: public-domain woodcut, wikimedia commons</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────── why ───────────── -->
+  <section class="tp-section is-light" id="why">
+    <div class="tp-section-inner">
+      <div class="tp-sh">
+        <span class="tp-sh-eye">Why</span>
+        <span class="tp-sh-rule"></span>
+        <span class="tp-sh-num">01</span>
+      </div>
+      <blockquote class="tp-quote">
+        Taskwarrior is excellent — but it's a C++ binary, and on Windows it lives
+        behind WSL or a brittle MSYS2 build.
+      </blockquote>
+      <p class="tp-lede">
+        If your app already speaks YAML and lives on the filesystem, you don't need
+        any of that. Built by <a href="https://github.com/alexgc96" target="_blank" rel="noopener" style="border-bottom:1px solid currentColor;">analogtrsh studio</a>
+        as the native task backend for Studio OS on Windows, taskpeasant re-implements
+        the Taskwarrior model in pure Python — released GPL-3.0-or-later, the same
+        license as Taskwarrior, whose open-source code is the reference for
+        taskpeasant's behaviour, defaults, and output shape.
+      </p>
+    </div>
+  </section>
+
+  <!-- ───────────── what it ports ───────────── -->
+  <section class="tp-section is-white" id="ports">
+    <div class="tp-section-inner">
+      <div class="tp-sh">
+        <span class="tp-sh-eye">What it ports</span>
+        <span class="tp-sh-rule"></span>
+        <span class="tp-sh-num">02</span>
+      </div>
+      <div class="tp-grid">
+        <div class="tp-fcard">
+          <span class="tp-fcard-idx">/01</span>
+          <h3>Data model</h3>
+          <p>UUID, status, tags, due/scheduled/wait/until, depends, annotations, projects, priorities, UDAs, opt-in recurrence.</p>
+        </div>
+        <div class="tp-fcard">
+          <span class="tp-fcard-idx">/02</span>
+          <h3>CLI grammar</h3>
+          <p><code class="mono">task add</code>, <code class="mono">task 3 done</code>, <code class="mono">task +work list</code>, attribute modifiers, boolean filters, ID ranges, /regex/.</p>
+        </div>
+        <div class="tp-fcard">
+          <span class="tp-fcard-idx">/03</span>
+          <h3>Report engine</h3>
+          <p>Every Taskwarrior built-in report — next, list, ready, overdue, waiting, blocked — plus custom reports from config.</p>
+        </div>
+        <div class="tp-fcard">
+          <span class="tp-fcard-idx">/04</span>
+          <h3>Graphical reports</h3>
+          <p>burndown.daily/weekly/monthly, history/ghistory, calendar, summary, stats, timesheet.</p>
+        </div>
+        <div class="tp-fcard">
+          <span class="tp-fcard-idx">/05</span>
+          <h3>Urgency polynomial</h3>
+          <p>Taskwarrior's real urgency formula, with configurable <code class="mono">urgency.*</code> coefficients.</p>
+        </div>
+        <div class="tp-fcard">
+          <span class="tp-fcard-idx">/06</span>
+          <h3>Config system</h3>
+          <p>taskrc files, <code class="mono">rc.key=value</code> overrides, color rules, aliases, contexts, UDAs.</p>
+        </div>
+        <div class="tp-fcard">
+          <span class="tp-fcard-idx">/07</span>
+          <h3>Lifecycle</h3>
+          <p>undo, duplicate, purge, log, append/prepend, denotate, import/export (TW wire JSON), task edit.</p>
+        </div>
+        <div class="tp-fcard">
+          <span class="tp-fcard-idx">/08</span>
+          <h3>Plain YAML storage</h3>
+          <p>Diffable, git-friendly, no daemon, no DB. Sync is intentionally out — taskpeasant is local-first.</p>
+        </div>
+      </div>
+      <p class="tp-lede" style="margin-top:24px;">
+        See the full feature matrix against Taskwarrior — including the honest list
+        of gaps — in
+        <a href="https://github.com/alexgc96/taskpeasant/blob/main/docs/parity.md" target="_blank" rel="noopener" style="border-bottom:1px solid currentColor;">docs/parity.md</a>.
+      </p>
+    </div>
+  </section>
+
+  <!-- ───────────── quickstart ───────────── -->
+  <section class="tp-section is-dark" id="quickstart">
+    <div class="tp-section-inner">
+      <div class="tp-sh">
+        <span class="tp-sh-eye">Quickstart</span>
+        <span class="tp-sh-rule"></span>
+        <span class="tp-sh-num">03</span>
+      </div>
+      <p class="tp-lede">
+        The CLI installs as <code class="mono">tp</code> (and <code class="mono">taskpeasant</code>).
+        We deliberately don't claim the <code class="mono">task</code> name, so a real
+        Taskwarrior install can coexist — <code class="mono">alias task=tp</code> completes
+        the illusion if taskpeasant is the only task tool on the machine.
+      </p>
+
+      <div class="tp-panels" style="margin-top:32px;">
+        <div class="tp-win">
+          <div class="tp-win-tb">
+            <span class="tp-win-lights"><span></span><span></span><span></span></span>
+            <span class="tp-win-name">□□■ CLI</span>
+          </div>
+          <pre><span class="c">export TASKPEASANT_FILE=~/tasks/work.yaml</span>
+
+tp task add Write the pitch deck +work project:studio due:tomorrow priority:H
+tp task add Fix boiler +home due:-2d
+tp task 2 start
+tp task next                     <span class="c">TW's urgency-ranked report</span>
+tp task +home list               <span class="c">filters compose with any report</span>
+tp task due.before:eow ready     <span class="c">attribute modifiers, TW date synonyms</span>
+tp task 1 done
+tp task undo                     <span class="c">take that back</span>
+tp task burndown.weekly          <span class="c">graphical reports</span>
+tp task summary
+tp task rc.report.mine.columns=id,project,description.desc mine</pre>
+        </div>
+
+        <div class="tp-win">
+          <div class="tp-win-tb">
+            <span class="tp-win-lights"><span></span><span></span><span></span></span>
+            <span class="tp-win-name">□□■ EMBEDDED.PY</span>
+          </div>
+          <pre><span class="a">from</span> taskpeasant <span class="a">import</span> execute_command, read_tasks, cmd_add, Taskrc
+
+yaml_path = <span class="g">"/path/to/your/tasks.yaml"</span>
+
+<span class="c"># the TW-style CLI parser returns plain text for your terminal widget:</span>
+print(execute_command(<span class="g">"task add render the final shot +urgent due:tomorrow"</span>, yaml_path))
+print(execute_command(<span class="g">"task next"</span>, yaml_path))
+print(execute_command(<span class="g">"task +urgent export"</span>, yaml_path))   <span class="c"># TW wire JSON</span>
+
+<span class="c"># optional: hand it a config with custom reports / urgency / colors</span>
+conf = Taskrc({<span class="g">"report.kanban.columns"</span>: <span class="g">"id,project,description.desc"</span>,
+               <span class="g">"report.kanban.filter"</span>: <span class="g">"+ACTIVE"</span>})
+print(execute_command(<span class="g">"task kanban"</span>, yaml_path, config=conf))
+
+<span class="c"># …or call the Python API directly:</span>
+cmd_add(yaml_path, <span class="g">"another task"</span>, tags=[<span class="g">"render"</span>], due=<span class="g">"2026-06-25"</span>)
+tasks = read_tasks(yaml_path)</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────── storage + config ───────────── -->
+  <section class="tp-section is-light" id="storage">
+    <div class="tp-section-inner">
+      <div class="tp-sh">
+        <span class="tp-sh-eye">Storage &amp; config</span>
+        <span class="tp-sh-rule"></span>
+        <span class="tp-sh-num">04</span>
+      </div>
+      <div class="tp-split">
+        <div>
+          <p class="tp-lede" style="margin-bottom:16px;">
+            taskpeasant reads and writes a single top-level key,
+            <code class="mono">taskpeasant_tasks:</code>, inside any YAML file you point it
+            at — it will never touch any other key, so you can embed it inside a file
+            that already carries project metadata or config. The undo journal lives in
+            a sidecar file (<code class="mono">&lt;file&gt;.undo</code>) for the same reason.
+          </p>
+          <div class="tp-win">
+            <div class="tp-win-tb">
+              <span class="tp-win-lights"><span></span><span></span><span></span></span>
+              <span class="tp-win-name">□□■ TASKS.YAML</span>
+            </div>
+            <pre>taskpeasant_tasks:
+  - uuid: 8c2f1a3b-...
+    description: render the final shot
+    status: pending
+    entry: 2026-06-19T14:30:00Z
+    tags: [urgent]
+    due: 2026-06-20T00:00:00Z</pre>
+          </div>
+        </div>
+        <div>
+          <p class="tp-lede" style="margin-bottom:16px;">
+            Config is a Taskwarrior-style <code class="mono">taskrc</code>, read from
+            <code class="mono">$TASKPEASANT_TASKRC</code>, <code class="mono">$TASKRC</code>,
+            <code class="mono">~/.taskpeasantrc</code>, or
+            <code class="mono">$XDG_CONFIG_HOME/taskpeasant/taskrc</code>. Everything can
+            also be passed per-invocation as <code class="mono">rc.key=value</code>.
+          </p>
+          <div class="tp-win">
+            <div class="tp-win-tb">
+              <span class="tp-win-lights"><span></span><span></span><span></span></span>
+              <span class="tp-win-name">□□■ TASKRC</span>
+            </div>
+            <pre>default.command=next
+urgency.user.tag.next.coefficient=15.0
+report.kanban.columns=id,project,description.desc
+color.overdue=bold red
+alias.rm=delete
+context.work=+work
+recurrence=on          <span class="c"># opt-in; read BACKWARDS_COMPAT.md first</span></pre>
+          </div>
+        </div>
+      </div>
+      <p class="tp-lede" style="margin-top:24px;">
+        Full storage contract in
+        <a href="https://github.com/alexgc96/taskpeasant/blob/main/docs/storage.md" target="_blank" rel="noopener" style="border-bottom:1px solid currentColor;">docs/storage.md</a>
+        and
+        <a href="https://github.com/alexgc96/taskpeasant/blob/main/docs/BACKWARDS_COMPAT.md" target="_blank" rel="noopener" style="border-bottom:1px solid currentColor;">docs/BACKWARDS_COMPAT.md</a>.
+      </p>
+    </div>
+  </section>
+
+  <!-- ───────────── status ───────────── -->
+  <section class="tp-section is-dark" id="status">
+    <div class="tp-section-inner">
+      <div class="tp-sh">
+        <span class="tp-sh-eye">Status</span>
+        <span class="tp-sh-rule"></span>
+        <span class="tp-sh-num">05</span>
+      </div>
+      <div class="tp-status-grid">
+        <div>
+          <h2 class="tp-h2">Beta. Frozen contract.</h2>
+          <p class="tp-lede">
+            The public API and storage contract are frozen and guarded by a test
+            suite. Feature coverage against Taskwarrior is tracked openly — gaps and
+            all — so you know exactly what you're opting into before you embed it.
+          </p>
+        </div>
+        <div class="tp-win">
+          <div class="tp-win-tb">
+            <span class="tp-win-lights"><span></span><span></span><span></span></span>
+            <span class="tp-win-name">□□■ STATUS.LOG</span>
+          </div>
+          <div style="padding:20px 22px;">
+            <div class="tp-log">
+              <div class="tp-log-r"><span class="tp-log-k">Release</span><span class="tp-log-v is-accent">Beta</span></div>
+              <div class="tp-log-r"><span class="tp-log-k">Public API</span><span class="tp-log-v is-green">Frozen</span></div>
+              <div class="tp-log-r"><span class="tp-log-k">Storage contract</span><span class="tp-log-v is-green">Frozen</span></div>
+              <div class="tp-log-r"><span class="tp-log-k">Sync</span><span class="tp-log-v">Out of scope</span></div>
+              <div class="tp-log-r"><span class="tp-log-k">License</span><span class="tp-log-v">GPL-3.0-or-later</span></div>
+              <div class="tp-log-r"><span class="tp-log-k">Reference impl.</span><span class="tp-log-v">Taskwarrior</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────── cta strip ───────────── -->
+  <div class="tp-strip">
+    <div class="tp-strip-inner">
+      <h3>pipx install taskpeasant</h3>
+      <a class="tp-strip-cta" href="https://github.com/alexgc96/taskpeasant" target="_blank" rel="noopener">
+        read the docs →
+      </a>
+    </div>
+  </div>
+
+</main>
+
+<footer class="tp-footer">
+  <div class="tp-f-top">
+    <div class="tp-f-brand">
+      built by <a href="https://github.com/alexgc96" target="_blank" rel="noopener">analogtrsh studio</a> — native task backend for Studio OS
+    </div>
+    <div class="tp-f-links">
+      <a href="https://github.com/alexgc96/taskpeasant" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/alexgc96/taskpeasant/issues" target="_blank" rel="noopener">Issues</a>
+      <a href="https://github.com/alexgc96/taskpeasant/blob/main/docs/parity.md" target="_blank" rel="noopener">Parity</a>
+      <a href="https://github.com/alexgc96/taskpeasant/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
+    </div>
+  </div>
+  <div class="tp-f-rule"></div>
+  <div class="tp-f-bot">
+    <span>taskpeasant — GPL-3.0-or-later</span>
+    <span>mascot: public-domain woodcut, wikimedia commons</span>
+  </div>
+</footer>
+
+<script>
+  // copy-to-clipboard for the install command
+  document.getElementById('copyInstall').addEventListener('click', function () {
+    var btn = this;
+    var text = btn.getAttribute('data-copy');
+    navigator.clipboard.writeText(text).then(function () {
+      var original = btn.textContent;
+      btn.textContent = 'copied';
+      btn.classList.add('is-copied');
+      setTimeout(function () {
+        btn.textContent = original;
+        btn.classList.remove('is-copied');
+      }, 1400);
+    });
+  });
+
+  // live GitHub star count, falls back to "GitHub" if the request fails
+  fetch('https://api.github.com/repos/alexgc96/taskpeasant')
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (data) {
+      if (data && typeof data.stargazers_count === 'number') {
+        document.querySelector('.tp-gh-btn').innerHTML =
+          '★ ' + data.stargazers_count + ' <span class="tp-gh-stars">on GitHub</span>';
+      }
+    })
+    .catch(function () {});
+</script>
+
+</body>
+</html>

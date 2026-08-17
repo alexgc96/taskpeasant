@@ -27,12 +27,16 @@ See [`docs/parity.md`](docs/parity.md) for the full feature matrix against Taskw
 ## Install
 
 ```bash
-pip install taskpeasant
+pipx install taskpeasant
 ```
 
-Or, while developing alongside a host app:
+`pipx` installs `tp` as a global command without touching your system Python. If you don't have pipx: `pip install pipx` or `brew install pipx`.
+
+For embedding in a host app:
 
 ```bash
+pip install taskpeasant
+# or, during development:
 pip install -e ../taskpeasant
 ```
 

@@ -302,10 +302,12 @@ img { display: block; max-width: 100%; }
 .tp-win pre .a { color: var(--accent); }
 
 .tp-panels { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.tp-panels > * { min-width: 0; }
 @media (max-width: 900px) { .tp-panels { grid-template-columns: 1fr; } }
 
 /* ───────────────────────── status log ───────────────────────── */
 .tp-status-grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 40px; align-items: start; }
+.tp-status-grid > * { min-width: 0; }
 @media (max-width: 900px) { .tp-status-grid { grid-template-columns: 1fr; } }
 .tp-log { display: flex; flex-direction: column; }
 .tp-log-r {
@@ -320,6 +322,7 @@ img { display: block; max-width: 100%; }
 
 /* ───────────────────────── storage / config split ───────────────────────── */
 .tp-split { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: start; }
+.tp-split > * { min-width: 0; }
 @media (max-width: 900px) { .tp-split { grid-template-columns: 1fr; } }
 
 /* ───────────────────────── final cta strip ───────────────────────── */

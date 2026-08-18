@@ -38,3 +38,4 @@ tasks.yaml.undo
 .claude/
 package.json
 package-lock.json
+poetry.lock

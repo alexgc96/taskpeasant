@@ -1,14 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
+  <meta name="generator" content="HTML Tidy for HTML5 for Apple macOS version 5.8.0">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>taskpeasant — Taskwarrior logic, ported to Python</title>
-  <meta name="description"
-    content="A YAML-native, pure-Python task engine that re-implements Taskwarrior's data model, CLI grammar, and report engine — for local-first apps where the Taskwarrior binary isn't available.">
+  <meta name="description" content="A YAML-native, pure-Python task engine that re-implements Taskwarrior's data model, CLI grammar, and report engine — for local-first apps where the Taskwarrior binary isn't available.">
   <link rel="icon" href="assets/taskpeasant-logo.png">
-
   <style>
     body {
       background: #ffffff;
@@ -81,7 +79,7 @@
       image-rendering: pixelated;
       border-image-source: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIIAAABiBAMAAABuaRZMAAAAD1BMVEUAAAB7p1S1uKa1uKbGKEN07jaiAAAAA3RSTlMA/wPwW2gWAAAEEElEQVR42pyVgYnkMBRDny5TgMQ2cCVkcQPTf1U3wSeMQwB2FWDJW6M431IGnpUH8jPJmCUh/9whLOU3Dtoc/BsHP98+6y8wOE6oQoALDXpflf4BYMFxXVSRgXFc1wnIoSrddaEPp0oAPp6X9QLcKICp8cVLFQAu1o3FAHeKCNOA86NpIVCScJzHRwxIEoOB0hrXeozjdRxjOhgZxZ/7832OgWImBUq72Vie+P0eyxfAjPF6XbZiUUqbGkUQ4MUL6mCYevPm/salAccQId/34PvTlsOiMk4z3zl8AyAR395YwQbgq1QmNPM9i28jkJR4m/oFbDD6Km13FMvNgzId8nDymQ5xqawYECE0k4mM5If0yUZOKA0dmBzaC8VGeWxAjBRTGnkrwdBcGiO3ftcfWlxN74t6rKrUHcR0C9ofrm7QJAHAqzuszKuV8npVDEqHFLVgbneAlXkBCJA7bmwU96DkltntjmFlXkwZNQjEJLS4XmtWd5hSHQRBDSMxWcU1AdfBVHUwzZdY0VdWcd0Moc2hmff0ToJpKS3LzOJq/lOAaHdgZd5GBpn4/x5MlHQPShdItDtVbGFiCKuUIorpHICAgnC7U8mWnIAMq5RWvH1EZUjmcjbFkmLQVkrLtw+5QbGtsEtleykloMXdn2duspPArZTS4w9aInFX9K82M0BxHYaBaMReQLlJ73+6j4P6+K+Ahxo6AEsIVb2yRtJMGSqMRuChOtz5BDUfAHf0qK+J8AGnZzT/aoCTNJ1l5a+bdEdwUVXrw9MfaAFXBsVS9/SHIQJll0DBDk1m/Gp27wFpGPzr85qbETSPaVT1DJlmdgcwu9fAHn6vCHVwhl4RGDh9kIdi5KxUHN3FRYDFwK/qgWHyf4SDmpwIgxNemPsH3OSPv7yvjPJRSABcTZh+QDq4BLgaMf2AK3kXAlwNoB+8ywJSwtUA+gEUhRDD1QD6AfRgoYarAfSDoSi7AVyNoB/MGcgDXA2gH5AH7kJ3me+zuQvqQUnIqaAeqEkxLaKKmoQXBxGgaCBlpKhJ7rf5JTDJ3URaYzmqZjcyIvAyq2ZvYuMbeBOLqtnb4LMlextMqpmNFLnscXRH1eyt+LpXhNJWnFSzN/PqJw3azJNqtjoYOWt1sFfNLyuU5+G2Qum/rWp+faqkJ4JV0t9WNVuprXcPiazU9qrZanGWfavFoJqtWKdgrVi/UM2Q8hvVLOVuxqLcg2rGPRBj5R7sVTMOhhlrB2OrmksuCoUgF6W3qrnk5FCMcnJ6p5rtR8FY95KgmhUBxipCUM1y1TiDXLWgmuXskQc5e0E1y13kLuQuBtUsh1P1wMuomqGKahISJNVspxde2OnNqpnEw02ed6qZcsuOd/3Kdc/O/89/fTj/BeQfHOPms3wI298AAAAASUVORK5CYII=");
     }
-    
+
     .caption {
       text-align: center;
       font-style: italic;
@@ -99,66 +97,40 @@
     }
   </style>
 </head>
-
 <body>
-
   <div class="wildflower center">
-    <img src="assets/taskpeasant-logo.png"
-      alt="taskpeasant — a peasant with a knife and a basket, from a public-domain woodcut">
+    <img src="assets/taskpeasant-logo.png" alt="taskpeasant — a peasant with a knife and a basket, from a public-domain woodcut">
     <h1>TASK / PEASANT</h1>
     <p><strong>Taskwarrior logic, ported to Python — as close as we could get.</strong><br>
-      A YAML-native task engine for local-first apps and platforms where the Taskwarrior binary is unavailable — like
-      native Windows.</p>
+    A YAML-native task engine for local-first apps and platforms where the Taskwarrior binary is unavailable — like native Windows.</p>
     <p><code>pipx install taskpeasant</code></p>
     <p><a href="https://github.com/alexgc96/taskpeasant" target="_blank" rel="noopener">view on GitHub →</a></p>
     <p class="caption">mascot: public-domain woodcut, wikimedia commons</p>
   </div>
-
   <div class="parchment">
     <h2>Why</h2>
-    <blockquote>Taskwarrior is excellent — but it's a C++ binary, and on Windows it lives behind WSL or a brittle MSYS2
-      build.</blockquote>
-    <p>If your app already speaks YAML and lives on the filesystem, you don't need any of that. Built by
-      <a href="https://github.com/alexgc96" target="_blank" rel="noopener">analogtrsh studio</a> as the native task
-      backend
-      for Studio OS on Windows, taskpeasant re-implements the Taskwarrior model in pure Python — released
-      GPL-3.0-or-later, the same license as Taskwarrior, whose open-source code is the reference for
-      taskpeasant's behaviour, defaults, and output shape.
-    </p>
+    <blockquote>
+      Taskwarrior is excellent — but it's a C++ binary, and on Windows it lives behind WSL or a brittle MSYS2 build.
+    </blockquote>
+    <p>If your app already speaks YAML and lives on the filesystem, you don't need any of that. Built by <a href="https://github.com/alexgc96" target="_blank" rel="noopener">analogtrsh studio</a> as the native task backend for Studio OS on Windows, taskpeasant re-implements the Taskwarrior model in pure Python — released GPL-3.0-or-later, the same license as Taskwarrior, whose open-source code is the reference for taskpeasant's behaviour, defaults, and output shape.</p>
   </div>
-
   <div class="parchment">
     <h2>What it ports</h2>
     <ul>
-      <li><strong>Data model</strong> — UUID, status, tags, due/scheduled/wait/until, depends, annotations, projects,
-        priorities, UDAs, opt-in recurrence.</li>
-      <li><strong>CLI grammar</strong> — <code>task add</code>, <code>task 3 done</code>, <code>task +work list</code>,
-        attribute modifiers, boolean filters, ID ranges, /regex/.</li>
-      <li><strong>Report engine</strong> — every Taskwarrior built-in report — next, list, ready, overdue, waiting,
-        blocked — plus custom reports from config.</li>
-      <li><strong>Graphical reports</strong> — burndown.daily/weekly/monthly, history/ghistory, calendar, summary,
-        stats, timesheet.</li>
-      <li><strong>Urgency polynomial</strong> — Taskwarrior's real urgency formula, with configurable
-        <code>urgency.*</code> coefficients.</li>
-      <li><strong>Config system</strong> — taskrc files, <code>rc.key=value</code> overrides, color rules, aliases,
-        contexts, UDAs.</li>
-      <li><strong>Lifecycle</strong> — undo, duplicate, purge, log, append/prepend, denotate, import/export (TW wire
-        JSON), task edit.</li>
-      <li><strong>Plain YAML storage</strong> — diffable, git-friendly, no daemon, no DB. Sync is intentionally out —
-        taskpeasant is local-first.</li>
+      <li><strong>Data model</strong> — UUID, status, tags, due/scheduled/wait/until, depends, annotations, projects, priorities, UDAs, opt-in recurrence.</li>
+      <li><strong>CLI grammar</strong> — <code>task add</code>, <code>task 3 done</code>, <code>task +work list</code>, attribute modifiers, boolean filters, ID ranges, /regex/.</li>
+      <li><strong>Report engine</strong> — every Taskwarrior built-in report — next, list, ready, overdue, waiting, blocked — plus custom reports from config.</li>
+      <li><strong>Graphical reports</strong> — burndown.daily/weekly/monthly, history/ghistory, calendar, summary, stats, timesheet.</li>
+      <li><strong>Urgency polynomial</strong> — Taskwarrior's real urgency formula, with configurable <code>urgency.*</code> coefficients.</li>
+      <li><strong>Config system</strong> — taskrc files, <code>rc.key=value</code> overrides, color rules, aliases, contexts, UDAs.</li>
+      <li><strong>Lifecycle</strong> — undo, duplicate, purge, log, append/prepend, denotate, import/export (TW wire JSON), task edit.</li>
+      <li><strong>Plain YAML storage</strong> — diffable, git-friendly, no daemon, no DB. Sync is intentionally out — taskpeasant is local-first.</li>
     </ul>
-    <p>See the full feature matrix against Taskwarrior — including the honest list of gaps — in
-      <a href="https://github.com/alexgc96/taskpeasant/blob/main/docs/parity.md" target="_blank"
-        rel="noopener">docs/parity.md</a>.
-    </p>
+    <p>See the full feature matrix against Taskwarrior — including the honest list of gaps — in <a href="https://github.com/alexgc96/taskpeasant/blob/main/docs/parity.md" target="_blank" rel="noopener">docs/parity.md</a>.</p>
   </div>
-
   <div class="parchment">
     <h2>Quickstart</h2>
-    <p>The CLI installs as <code>tp</code> (and <code>taskpeasant</code>). We deliberately don't claim the
-      <code>task</code> name, so a real Taskwarrior install can coexist — <code>alias task=tp</code> completes
-      the illusion if taskpeasant is the only task tool on the machine.
-    </p>
+    <p>The CLI installs as <code>tp</code> (and <code>taskpeasant</code>). We deliberately don't claim the <code>task</code> name, so a real Taskwarrior install can coexist — <code>alias task=tp</code> completes the illusion if taskpeasant is the only task tool on the machine.</p>
     <pre>export TASKPEASANT_FILE=~/tasks/work.yaml
 
 # the TW-style CLI parser returns plain text for your terminal widget:
@@ -175,13 +147,9 @@ print(execute_command("task kanban", yaml_path, config=conf))
 cmd_add(yaml_path, "another task", tags=["render"], due="2026-06-25")
 tasks = read_tasks(yaml_path)</pre>
   </div>
-
   <div class="parchment">
-    <h2>Storage &amp; config</h2>
-    <p>taskpeasant reads and writes a single top-level key, <code>taskpeasant_tasks:</code>, inside any YAML
-      file you point it at — it will never touch any other key, so you can embed it inside a file that already
-      carries project metadata or config. The undo journal lives in a sidecar file (<code>&lt;file&gt;.undo</code>)
-      for the same reason.</p>
+    <h2>Storage & config</h2>
+    <p>taskpeasant reads and writes a single top-level key, <code>taskpeasant_tasks:</code>, inside any YAML file you point it at — it will never touch any other key, so you can embed it inside a file that already carries project metadata or config. The undo journal lives in a sidecar file (<code>&lt;file&gt;.undo</code>) for the same reason.</p>
     <pre>taskpeasant_tasks:
   - uuid: 8c2f1a3b-...
     description: render the final shot
@@ -189,10 +157,7 @@ tasks = read_tasks(yaml_path)</pre>
     entry: 2026-06-19T14:30:00Z
     tags: [urgent]
     due: 2026-06-20T00:00:00Z</pre>
-    <p>Config is a Taskwarrior-style <code>taskrc</code>, read from <code>$TASKPEASANT_TASKRC</code>,
-      <code>$TASKRC</code>, <code>~/.taskpeasantrc</code>, or <code>$XDG_CONFIG_HOME/taskpeasant/taskrc</code>.
-      Everything can also be passed per-invocation as <code>rc.key=value</code>.
-    </p>
+    <p>Config is a Taskwarrior-style <code>taskrc</code>, read from <code>$TASKPEASANT_TASKRC</code>, <code>$TASKRC</code>, <code>~/.taskpeasantrc</code>, or <code>$XDG_CONFIG_HOME/taskpeasant/taskrc</code>. Everything can also be passed per-invocation as <code>rc.key=value</code>.</p>
     <pre>default.command=next
 urgency.user.tag.next.coefficient=15.0
 report.kanban.columns=id,project,description.desc
@@ -200,21 +165,12 @@ color.overdue=bold red
 alias.rm=delete
 context.work=+work
 recurrence=on          # opt-in; read BACKWARDS_COMPAT.md first</pre>
-    <p>Full storage contract in
-      <a href="https://github.com/alexgc96/taskpeasant/blob/main/docs/storage.md" target="_blank"
-        rel="noopener">docs/storage.md</a>
-      and
-      <a href="https://github.com/alexgc96/taskpeasant/blob/main/docs/BACKWARDS_COMPAT.md" target="_blank"
-        rel="noopener">docs/BACKWARDS_COMPAT.md</a>.
-    </p>
+    <p>Full storage contract in <a href="https://github.com/alexgc96/taskpeasant/blob/main/docs/storage.md" target="_blank" rel="noopener">docs/storage.md</a> and <a href="https://github.com/alexgc96/taskpeasant/blob/main/docs/BACKWARDS_COMPAT.md" target="_blank" rel="noopener">docs/BACKWARDS_COMPAT.md</a>.</p>
   </div>
-
   <div class="parchment">
     <h2>Status</h2>
     <h3>Beta. Frozen contract.</h3>
-    <p>The public API and storage contract are frozen and guarded by a test suite. Feature coverage against
-      Taskwarrior is tracked openly — gaps and all — so you know exactly what you're opting into before you
-      embed it.</p>
+    <p>The public API and storage contract are frozen and guarded by a test suite. Feature coverage against Taskwarrior is tracked openly — gaps and all — so you know exactly what you're opting into before you embed it.</p>
     <ul>
       <li><strong>Release:</strong> Beta</li>
       <li><strong>Public API:</strong> Frozen</li>
@@ -224,27 +180,13 @@ recurrence=on          # opt-in; read BACKWARDS_COMPAT.md first</pre>
       <li><strong>Reference impl.:</strong> Taskwarrior</li>
     </ul>
   </div>
-
   <div class="parchment center">
-    <h3>pipx install taskpeasant</h3>
-    <a href="https://github.com/alexgc96/taskpeasant" target="_blank" rel="noopener">read the docs →</a>
+    <h3>pipx install taskpeasant</h3><a href="https://github.com/alexgc96/taskpeasant" target="_blank" rel="noopener">read the docs →</a>
   </div>
-
   <footer>
-    <p>built by <a href="https://dev.analogtrsh.com" target="_blank" rel="noopener">analogtrsh studio</a> — native task
-      backend for Studio OS</p>
-    <p>
-      <a href="https://github.com/alexgc96/taskpeasant" target="_blank" rel="noopener">GitHub</a> ·
-      <a href="https://github.com/alexgc96/taskpeasant/issues" target="_blank" rel="noopener">Issues</a> ·
-      <a href="https://github.com/alexgc96/taskpeasant/blob/main/docs/parity.md" target="_blank"
-        rel="noopener">Parity</a> ·
-      <a href="https://github.com/alexgc96/taskpeasant/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
-    </p>
+    <p>built by <a href="https://dev.analogtrsh.com" target="_blank" rel="noopener">analogtrsh studio</a> — native task backend for Studio OS</p>
+    <p><a href="https://github.com/alexgc96/taskpeasant" target="_blank" rel="noopener">GitHub</a> · <a href="https://github.com/alexgc96/taskpeasant/issues" target="_blank" rel="noopener">Issues</a> · <a href="https://github.com/alexgc96/taskpeasant/blob/main/docs/parity.md" target="_blank" rel="noopener">Parity</a> · <a href="https://github.com/alexgc96/taskpeasant/blob/main/LICENSE" target="_blank" rel="noopener">License</a></p>
     <p>taskpeasant — GPL-3.0-or-later · an attempt at recreating the Taskwarrior experience</p>
-  </footer>
-<!-- the really cool css border i got from this very cool persons collection ;) https://ribo.zone/free/snippets/borders check their blog out! -->
+  </footer><!-- the really cool css border i got from this very cool persons collection ;) https://ribo.zone/free/snippets/borders check their blog out! -->
 </body>
-  </html>
-
-
- 
+</html>

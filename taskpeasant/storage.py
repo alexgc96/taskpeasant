@@ -25,6 +25,7 @@ collision. See docs/BACKWARDS_COMPAT.md for the full contract.
 from __future__ import annotations
 
 import os
+import tempfile
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -136,11 +137,20 @@ def write_tasks(yaml_path: str, tasks: List[Task]) -> None:
             # Restore tasks: as empty dict so mapping lookups don't break
             current["tasks"] = {}
 
-        p.write_text(
-            yaml.dump(current, default_flow_style=False,
-                      sort_keys=False, allow_unicode=True),
-            encoding="utf-8"
-        )
+        content = yaml.dump(current, default_flow_style=False,
+                            sort_keys=False, allow_unicode=True)
+        dir_ = p.parent
+        fd, tmp_path = tempfile.mkstemp(dir=dir_, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(content)
+            os.replace(tmp_path, p)
+        except Exception:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
 
 
 def assign_ids(yaml_path: str, tasks: List[Task], config=None) -> None:

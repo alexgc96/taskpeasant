@@ -139,8 +139,7 @@ def write_tasks(yaml_path: str, tasks: List[Task]) -> None:
 
         content = yaml.dump(current, default_flow_style=False,
                             sort_keys=False, allow_unicode=True)
-        dir_ = p.parent
-        fd, tmp_path = tempfile.mkstemp(dir=dir_, suffix=".tmp")
+        fd, tmp_path = tempfile.mkstemp(dir=p.parent, suffix=".tmp")
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
                 fh.write(content)

@@ -280,6 +280,21 @@ def _main() -> None:
         _rich_calendar(yaml_path)
         return
 
+    if first == "sync":
+        console.print(
+            "[bold yellow]sync[/bold yellow] is intentionally not implemented "
+            "in taskpeasant.\n\n"
+            "taskpeasant is local-first and never transfers data over a "
+            "network. Suggested alternatives:\n"
+            "  [dim]•[/dim] [cyan]git[/cyan]          — version-control your "
+            "tasks.yaml and push/pull normally\n"
+            "  [dim]•[/dim] [cyan]rsync / cp[/cyan]   — copy the YAML file "
+            "to another machine manually\n"
+            "  [dim]•[/dim] [cyan]network share[/cyan]— mount a shared drive "
+            "and point [bold]--file[/bold] at the shared path"
+        )
+        return
+
     # ── Report engine: `task [filter] <report> [filter]` ─────────────────────
     for i, tok in enumerate(tokens):
         if tok in report_names:

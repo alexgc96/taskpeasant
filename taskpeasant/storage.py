@@ -29,7 +29,10 @@ import tempfile
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List
+from typing import TYPE_CHECKING, List, Optional
+
+if TYPE_CHECKING:
+    from .urgency import UrgencyConfig
 
 import yaml
 
@@ -155,7 +158,7 @@ def write_tasks(yaml_path: str, tasks: List[Task]) -> None:
             raise
 
 
-def assign_ids(yaml_path: str, tasks: List[Task], config=None) -> None:
+def assign_ids(yaml_path: str, tasks: List[Task], config: Optional["UrgencyConfig"] = None) -> None:
     """
     Assign ephemeral integer IDs to pending/waiting tasks in-place.
     IDs are 1-based, sorted by urgency descending (mirrors Taskwarrior).

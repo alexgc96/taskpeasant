@@ -17,7 +17,10 @@ from __future__ import annotations
 import calendar
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING, Tuple
+
+if TYPE_CHECKING:
+    from ._taskrc import Taskrc
 
 from ._dates import parse_date
 from .task_model import Task
@@ -157,7 +160,7 @@ _BURNDOWN_SPANS = {"daily": (30, timedelta(days=1), "%d", "%b"),
                    "monthly": (24, None, "%m", "%Y")}
 
 
-def burndown_series(tasks: List[Task], period: str = "daily"):
+def burndown_series(tasks: List[Task], period: str = "daily") -> Tuple[List, List[Tuple[int, int, int]]]:
     """(dates, [(pending, started, done)]) snapshots for the chart."""
     now = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0,
                                              microsecond=0)
@@ -249,7 +252,7 @@ def cmd_burndown(tasks: List[Task], period: str = "daily") -> str:
 
 # ── calendar ──────────────────────────────────────────────────────────────────
 
-def _months_for_calendar(tasks: List[Task], args: List[str]):
+def _months_for_calendar(tasks: List[Task], args: List[str]) -> List[Tuple[int, int]]:
     """Resolve `task calendar [due | <year> | <month> <year>]` args to a
     list of (year, month) pairs."""
     now = datetime.now(timezone.utc)
@@ -289,7 +292,7 @@ def _months_for_calendar(tasks: List[Task], args: List[str]):
 
 
 def cmd_calendar(tasks: List[Task], args: Optional[List[str]] = None,
-                 conf=None) -> str:
+                 conf: Optional["Taskrc"] = None) -> str:
     """Month-grid calendar with a due-task legend (calendar.details)."""
     now = datetime.now(timezone.utc)
     today = now.date()
@@ -535,7 +538,7 @@ def cmd_tags(tasks: List[Task]) -> str:
     return "\n".join(lines)
 
 
-def cmd_udas(tasks: List[Task], conf=None) -> str:
+def cmd_udas(tasks: List[Task], conf: Optional["Taskrc"] = None) -> str:
     """UDAs: config-defined (uda.<name>.*) plus orphans found in tasks."""
     defined: dict = {}
     if conf is not None:

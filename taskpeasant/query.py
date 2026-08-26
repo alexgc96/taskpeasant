@@ -553,7 +553,7 @@ class Filter:
         return self._root.matches(task)
 
 
-def apply_filter(tasks: List[Task], tokens: list, *,
+def apply_filter(tasks: List[Task], tokens: List[str], *,
                  all_tasks: Optional[List[Task]] = None) -> List[Task]:
     """Filter tasks by TW-style tokens.
 

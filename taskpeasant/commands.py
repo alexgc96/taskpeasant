@@ -18,7 +18,10 @@ from __future__ import annotations
 
 import uuid as _uuid_mod
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .urgency import UrgencyConfig
 
 from .task_model import Task, _tw_to_iso
 from .storage import read_tasks, write_tasks, assign_ids
@@ -105,7 +108,7 @@ def _resolve_depends(tasks: list[Task], target: Task, spec: str) -> tuple:
 
 # ── add ───────────────────────────────────────────────────────────────────────
 
-def cmd_add(yaml_path: str, description: str, tags: list = None,
+def cmd_add(yaml_path: str, description: str, tags: Optional[list[str]] = None,
             due: str = "", scheduled: str = "", wait: str = "",
             project: str = "", priority: str = "",
             recur: str = "", until: str = "") -> str:
@@ -358,8 +361,8 @@ _BULK_LABELS = {
 }
 
 
-def cmd_bulk(yaml_path: str, filter_tokens: list, verb: str,
-             mods: dict = None, note: str = "") -> str:
+def cmd_bulk(yaml_path: str, filter_tokens: list[str], verb: str,
+             mods: Optional[dict[str, Any]] = None, note: str = "") -> str:
     """Apply a mutation verb to every task matching a filter expression.
 
     One read, one write: all matches are resolved against the pre-write
@@ -559,7 +562,7 @@ def cmd_purge(yaml_path: str, uuid_prefix: str = "") -> str:
     return f"Purged {n} task{'s' if n != 1 else ''}."
 
 
-def cmd_log(yaml_path: str, description: str, tags: list = None,
+def cmd_log(yaml_path: str, description: str, tags: Optional[list[str]] = None,
             project: str = "", priority: str = "") -> str:
     """Record an already-completed task (TW `log`)."""
     reserved = _reserved_tag(tags)
@@ -688,7 +691,7 @@ def cmd_import(yaml_path: str, json_text: str) -> str:
 
 # ── export (used by Flask API routes) ────────────────────────────────────────
 
-def cmd_export(yaml_path: str, filter_tokens: list = None, config=None) -> list:
+def cmd_export(yaml_path: str, filter_tokens: Optional[list[str]] = None, config: Optional["UrgencyConfig"] = None) -> list[dict[str, Any]]:
     """Return TW-wire-format dicts, ready to JSON-serialise for the UI.
 
     config: optional UrgencyConfig forwarded to compute_urgency.

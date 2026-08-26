@@ -25,7 +25,8 @@ from __future__ import annotations
 import json
 import re
 import shlex
-from typing import Optional
+from typing import List, Optional
+from .task_model import Task
 
 from . import commands
 from ._dates import resolve_date, parse_date
@@ -138,7 +139,7 @@ def _parse_mod_tokens(tokens: list) -> dict:
 
 # ── Main parser / dispatcher ──────────────────────────────────────────────────
 
-def execute_command(raw: str, yaml_path: str, config: Taskrc = None) -> str:
+def execute_command(raw: str, yaml_path: str, config: Optional[Taskrc] = None) -> str:
     """
     Parse a raw CLI string and dispatch to the correct command.
     Returns terminal output as a plain string.
@@ -425,7 +426,7 @@ def _execute_command(raw: str, yaml_path: str, config: Taskrc = None) -> str:
 
 # ── Filter / helper commands ──────────────────────────────────────────────────
 
-def _filtered_tasks(yaml_path: str, filter_tokens: list) -> list:
+def _filtered_tasks(yaml_path: str, filter_tokens: List[str]) -> List[Task]:
     """Read + assign ids/vtags + apply an optional filter."""
     tasks = read_tasks(yaml_path)
     assign_ids(yaml_path, tasks)
@@ -434,7 +435,7 @@ def _filtered_tasks(yaml_path: str, filter_tokens: list) -> list:
     return tasks
 
 
-def _compact_id_ranges(ids: list) -> str:
+def _compact_id_ranges(ids: List[int]) -> str:
     """[1,2,3,5] → '1-3 5' (TW `task ids` output form)."""
     if not ids:
         return ""
@@ -452,7 +453,7 @@ def _compact_id_ranges(ids: list) -> str:
     return " ".join(parts)
 
 
-def _cmd_helpers(yaml_path: str, cmd: str, filter_tokens: list, conf) -> str:
+def _cmd_helpers(yaml_path: str, cmd: str, filter_tokens: List[str], conf: Taskrc) -> str:
     """ids / uuids / _ids / _uuids / _projects / _tags / _commands."""
     if cmd == "_commands":
         names = sorted(set(conf.report_names()) | {
@@ -628,7 +629,7 @@ def _cmd_config(conf: Taskrc, args: list) -> str:
 
 # ── Output formatters ─────────────────────────────────────────────────────────
 
-def _cmd_list(yaml_path: str, filter_tokens: list) -> str:
+def _cmd_list(yaml_path: str, filter_tokens: List[str]) -> str:
     """Formatted task list — mirrors `task list` output style."""
     tasks = read_tasks(yaml_path)
     assign_ids(yaml_path, tasks)
@@ -655,7 +656,7 @@ def _cmd_list(yaml_path: str, filter_tokens: list) -> str:
     return "\n".join(lines)
 
 
-def _cmd_export_text(yaml_path: str, filter_tokens: list) -> str:
+def _cmd_export_text(yaml_path: str, filter_tokens: List[str]) -> str:
     """Return JSON string — used by terminal export commands."""
     data = commands.cmd_export(yaml_path, filter_tokens or None)
     return json.dumps(data, indent=2, default=str)
@@ -665,7 +666,7 @@ def _cmd_export_text(yaml_path: str, filter_tokens: list) -> str:
 
 
 
-def _cmd_count(yaml_path: str, filter_tokens: list) -> str:
+def _cmd_count(yaml_path: str, filter_tokens: List[str]) -> str:
     """Return task count as a plain integer string."""
     tasks = read_tasks(yaml_path)
     if filter_tokens:

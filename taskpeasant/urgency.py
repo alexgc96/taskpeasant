@@ -26,7 +26,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, fields
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING, Union
+
+if TYPE_CHECKING:
+    from ._taskrc import Taskrc
 
 from .task_model import Task
 
@@ -77,7 +80,7 @@ class UrgencyConfig:
     blocking:        float = 1.0
 
     @classmethod
-    def from_weights(cls, weights: dict) -> "UrgencyConfig":
+    def from_weights(cls, weights: Dict[str, Any]) -> "UrgencyConfig":
         """Build a config from a WEIGHTS-style dict; unknown keys ignored,
         missing keys fall back to the dataclass defaults."""
         known = {f.name for f in fields(cls)}
@@ -101,7 +104,7 @@ def _default_rc():
     return _DEFAULT_RC
 
 
-def _parse_iso(s: str):
+def _parse_iso(s: str) -> Optional[datetime]:
     """Parse ISO or TW date string → aware datetime, or None."""
     if not s:
         return None
@@ -116,7 +119,7 @@ def _parse_iso(s: str):
 
 # ── Public entry point ────────────────────────────────────────────────────────
 
-def compute_urgency(task: Task, config=None) -> float:
+def compute_urgency(task: Task, config: Union[UrgencyConfig, "Taskrc", None] = None) -> float:
     """Urgency score for a single task; 0.0 for completed/deleted.
 
     config selects the model:
@@ -263,7 +266,7 @@ def _tw_urgency(task: Task, conf) -> float:
     return round(max(score, 0.0), 2)
 
 
-def apply_inherited_urgency(tasks: List[Task], conf=None) -> None:
+def apply_inherited_urgency(tasks: List[Task], conf: Union[UrgencyConfig, "Taskrc", None] = None) -> None:
     """TW's urgency.inherit: a blocking task takes on the largest urgency
     among the tasks it blocks.  Sets t.urgency_value in place for every
     task.  No-op propagation when urgency.inherit is off (values are

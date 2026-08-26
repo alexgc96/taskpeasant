@@ -20,6 +20,7 @@ classifiers     = [
     "Programming Language :: Python :: 3 :: Only",
     "Topic :: Office/Business :: Scheduling",
     "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
 ]
 dependencies    = [
     "PyYAML>=6.0",
@@ -40,3 +41,6 @@ Issues   = "https://github.com/alexgc96/taskpeasant/issues"
 [tool.setuptools.packages.find]
 include = ["taskpeasant*"]
 exclude = ["tests*", "docs*"]
+
+[tool.setuptools.package-data]
+taskpeasant = ["py.typed"]

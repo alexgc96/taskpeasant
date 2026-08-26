@@ -69,11 +69,25 @@ internally during `waiting→pending` auto-transitions without deadlocking.
 
 Integer IDs are **never stored**. They are assigned at read time to
 `pending` and `waiting` tasks, sorted by urgency descending. ID assignment
-is cached by `(path, mtime)` — any write bumps the file's mtime and
+is cached by `(path, mtime, config)` — any write bumps the file's mtime and
 invalidates the cache, so a list followed immediately by an action resolves
 the same ID both times.
 
+The cache is capped at 256 entries (oldest evicted first). Unlike Taskwarrior,
+which is a short-lived CLI process and recomputes IDs on every invocation,
+TaskPeasant runs in-process and can accumulate one stale cache entry per unique
+mtime across a long session; the cap bounds worst-case memory growth.
+
 Completed and deleted tasks always have `id = 0`.
+
+> **Taskwarrior reference:** TaskPeasant takes Taskwarrior 2.x as its primary
+> reference because its flat-file storage model (human-readable, one file per
+> task set) is the closest analogue to TaskPeasant's YAML approach. Taskwarrior
+> 3.x persists tasks through a SQLite backend (taskchampion) and reuses ID
+> assignments across invocations via a persistent working set — a better fit for
+> some long-running embedded applications. TaskPeasant exists specifically to
+> run embedded in Python on Windows natively, without requiring a Taskwarrior
+> binary or a Linux/Unix container.
 
 ---
 

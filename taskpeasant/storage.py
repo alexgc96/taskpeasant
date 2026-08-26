@@ -45,7 +45,10 @@ _meta_lock  = threading.Lock()
 
 # mtime-keyed cache: (path, mtime) → [(id, uuid), ...]
 # Invalidated automatically when any write bumps the file's mtime.
+# Capped so files written to frequently during a long session don't accumulate
+# stale entries for every unique mtime.
 _id_cache: dict = {}
+_ID_CACHE_MAX = 256
 
 
 def _lock_for(path: str) -> threading.RLock:
@@ -184,6 +187,10 @@ def assign_ids(yaml_path: str, tasks: List[Task], config=None) -> None:
             t.urgency_value = compute_urgency(t, config)
         active.sort(key=lambda t: -t.urgency_value)
         _id_cache[key] = [(i + 1, t.uuid) for i, t in enumerate(active)]
+        if len(_id_cache) > _ID_CACHE_MAX:
+            oldest = next(iter(_id_cache))
+            if oldest != key:
+                _id_cache.pop(oldest)
 
     uuid_to_id = {uuid: id_ for id_, uuid in _id_cache[key]}
     for t in tasks:

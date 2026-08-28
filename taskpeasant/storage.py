@@ -62,10 +62,7 @@ def _posix_exclusive(lock_path: str):
     import fcntl
     with open(lock_path, "w") as lf:
         fcntl.flock(lf.fileno(), fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(lf.fileno(), fcntl.LOCK_UN)
+        yield  # closing the file releases the flock automatically
 
 
 @contextlib.contextmanager
@@ -105,9 +102,10 @@ def _os_exclusive_lock(yaml_path: str):
     POSIX: fcntl.flock(LOCK_EX) — automatically released if the process dies.
     Windows: O_CREAT|O_EXCL spin-wait sidecar (30 s timeout).
 
-    Re-entrant within the same thread (the threading.RLock already serialises
-    concurrent threads; re-entry only occurs when read_tasks calls write_tasks
-    to flush auto-transitioned waiting→pending tasks).
+    Re-entrant within the same thread: the Windows spin-wait would deadlock on
+    re-entry from the same thread, so we track depth and skip re-acquisition.
+    Guards against future call paths where write_tasks is invoked from within
+    an already-locked context.
     """
     depth_map: dict = getattr(_os_lock_depth, "by_path", None)
     if depth_map is None:

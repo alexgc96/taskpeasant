@@ -24,7 +24,9 @@ collision. See docs/BACKWARDS_COMPAT.md for the full contract.
 
 from __future__ import annotations
 
+import contextlib
 import os
+import sys
 import tempfile
 import threading
 from datetime import datetime, timezone
@@ -45,6 +47,92 @@ _TP_KEY = "taskpeasant_tasks"
 # One lock per file path — avoids cross-file blocking
 _file_locks: dict = {}
 _meta_lock  = threading.Lock()
+
+# Thread-local re-entry counter for the OS-level lock.
+# fcntl.flock on POSIX is per-process and re-entrant (a second flock from the
+# same process succeeds without waiting), but the Windows spin-wait sidecar
+# would deadlock on re-entry from the same thread.  This counter lets the
+# context manager skip acquisition when the calling thread already holds it.
+_os_lock_depth: threading.local = threading.local()
+
+
+@contextlib.contextmanager
+def _posix_exclusive(lock_path: str):
+    """Exclusive advisory lock via fcntl.flock.  Auto-released on process exit."""
+    import fcntl
+    with open(lock_path, "w") as lf:
+        fcntl.flock(lf.fileno(), fcntl.LOCK_EX)
+        yield  # closing the file releases the flock automatically
+
+
+@contextlib.contextmanager
+def _win_exclusive(lock_path: str):
+    """Exclusive lock via O_CREAT|O_EXCL spin-wait sidecar for Windows."""
+    import time
+    deadline = time.monotonic() + 30.0
+    fd = None
+    while True:
+        try:
+            fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            break
+        except FileExistsError:
+            if time.monotonic() > deadline:
+                raise TimeoutError(
+                    f"[taskpeasant] Could not acquire write lock within 30 s: {lock_path}"
+                )
+            time.sleep(0.05)
+    try:
+        yield
+    finally:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        try:
+            os.unlink(lock_path)
+        except OSError:
+            pass
+
+
+@contextlib.contextmanager
+def _os_exclusive_lock(yaml_path: str):
+    """
+    Cross-process exclusive lock on *yaml_path* + '.lock'.
+
+    POSIX: fcntl.flock(LOCK_EX) — automatically released if the process dies.
+    Windows: O_CREAT|O_EXCL spin-wait sidecar (30 s timeout).
+
+    Re-entrant within the same thread: the Windows spin-wait would deadlock on
+    re-entry from the same thread, so we track depth and skip re-acquisition.
+    Guards against future call paths where write_tasks is invoked from within
+    an already-locked context.
+    """
+    depth_map: dict = getattr(_os_lock_depth, "by_path", None)
+    if depth_map is None:
+        _os_lock_depth.by_path = {}
+        depth_map = _os_lock_depth.by_path
+
+    if depth_map.get(yaml_path, 0) > 0:
+        # Already holding the OS lock on this path in this thread.
+        depth_map[yaml_path] += 1
+        try:
+            yield
+        finally:
+            depth_map[yaml_path] -= 1
+        return
+
+    lock_path = yaml_path + ".lock"
+    depth_map[yaml_path] = 1
+    try:
+        if sys.platform == "win32":
+            with _win_exclusive(lock_path):
+                yield
+        else:
+            with _posix_exclusive(lock_path):
+                yield
+    finally:
+        depth_map[yaml_path] -= 1
+
 
 # mtime-keyed cache: (path, mtime) → [(id, uuid), ...]
 # Invalidated automatically when any write bumps the file's mtime.
@@ -122,40 +210,41 @@ def write_tasks(yaml_path: str, tasks: List[Task]) -> None:
     """
     lock = _lock_for(yaml_path)
     with lock:
-        p = Path(yaml_path)
-        try:
-            current = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
-        except Exception:
-            current = {}
-
-        # Write only to the TP-specific key
-        current[_TP_KEY] = [t.to_dict() for t in tasks]
-
-        # Migrate legacy data: if tasks: is a list (old TP writes), move it
-        # to taskpeasant_tasks: and restore tasks: to an empty dict so any
-        # sibling lookup that expects a mapping still works on next load.
-        if isinstance(current.get("tasks"), list):
-            # Merge: keep any items not already in _TP_KEY
-            existing_uuids = {t["uuid"] for t in current[_TP_KEY] if "uuid" in t}
-            for item in current["tasks"]:
-                if isinstance(item, dict) and item.get("uuid") not in existing_uuids:
-                    current[_TP_KEY].append(item)
-            # Restore tasks: as empty dict so mapping lookups don't break
-            current["tasks"] = {}
-
-        content = yaml.dump(current, default_flow_style=False,
-                            sort_keys=False, allow_unicode=True)
-        fd, tmp_path = tempfile.mkstemp(dir=p.parent, suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                fh.write(content)
-            os.replace(tmp_path, p)
-        except Exception:
+        with _os_exclusive_lock(yaml_path):
+            p = Path(yaml_path)
             try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
-            raise
+                current = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+            except Exception:
+                current = {}
+
+            # Write only to the TP-specific key
+            current[_TP_KEY] = [t.to_dict() for t in tasks]
+
+            # Migrate legacy data: if tasks: is a list (old TP writes), move it
+            # to taskpeasant_tasks: and restore tasks: to an empty dict so any
+            # sibling lookup that expects a mapping still works on next load.
+            if isinstance(current.get("tasks"), list):
+                # Merge: keep any items not already in _TP_KEY
+                existing_uuids = {t["uuid"] for t in current[_TP_KEY] if "uuid" in t}
+                for item in current["tasks"]:
+                    if isinstance(item, dict) and item.get("uuid") not in existing_uuids:
+                        current[_TP_KEY].append(item)
+                # Restore tasks: as empty dict so mapping lookups don't break
+                current["tasks"] = {}
+
+            content = yaml.dump(current, default_flow_style=False,
+                                sort_keys=False, allow_unicode=True)
+            fd, tmp_path = tempfile.mkstemp(dir=p.parent, suffix=".tmp")
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                    fh.write(content)
+                os.replace(tmp_path, p)
+            except Exception:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
 
 
 def assign_ids(yaml_path: str, tasks: List[Task], config: Optional["UrgencyConfig"] = None) -> None:

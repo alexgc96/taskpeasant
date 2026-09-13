@@ -7,12 +7,15 @@ Never called from execute_command() or any programmatic API path.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Optional, TYPE_CHECKING
 
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
+
+if TYPE_CHECKING:
+    from ._taskrc import Taskrc
 
 from ._dates import parse_date
 from .task_model import Task
@@ -262,37 +265,100 @@ def render_burndown(series: list, dates: list) -> Text:
 
 # ── Calendar ──────────────────────────────────────────────────────────────────
 
-def render_calendar(tasks: List[Task]) -> Text:
-    """Calendar with today highlighted and due dates in red."""
+def render_calendar(tasks: List[Task],
+                    conf: Optional["Taskrc"] = None) -> Text:
+    """Calendar with Taskwarrior-style per-day color shading.
+
+    Day cells, the week-number column, and the weekend day-of-week
+    headers are colored via the color.calendar.* rules in `_colors.py`
+    (see calendar_day_style / calendar_weeknumber_style).
+    """
     import calendar as _cal
     from collections import defaultdict
-    from datetime import datetime as dt_
+
+    from ._calendar_grid import month_weeks
+    from ._colors import calendar_day_style, calendar_weeknumber_style
 
     now   = datetime.now(timezone.utc)
     today = now.date()
+    monday_first = bool(conf) and \
+        conf.get("weekstart", "sunday").lower() == "monday"
+    show_wn     = conf.get_bool("displayweeknumber", True) if conf else True
+    show_legend = conf.get_bool("calendar.legend", True) if conf else True
 
     due_map: dict = defaultdict(list)
+    scheduled_days: set = set()
     for t in tasks:
-        if t.due and t.status == "pending":
+        if t.status != "pending":
+            continue
+        if t.due:
             d = parse_date(t.due)
             if d:
                 due_map[d.date()].append(t)
+        if t.scheduled:
+            s = parse_date(t.scheduled)
+            if s:
+                scheduled_days.add(s.date())
 
-    def render_month_text(year: int, month: int) -> list[str]:
-        header = f"{_cal.month_name[month]} {year}".center(20)
-        lines  = [header, "Su Mo Tu We Th Fr Sa"]
-        for week in _cal.monthcalendar(year, month):
-            parts = []
-            for day in week:
-                parts.append("  " if day == 0 else f"{day:2d}")
-            lines.append(" ".join(parts))
-        while len(lines) < 8:
-            lines.append("")
-        return lines
+    day_names   = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"] if monday_first \
+        else ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
+    weekend_idx = {5, 6} if monday_first else {0, 6}
+    weeknum_style = calendar_weeknumber_style(conf)
+    weekend_style = calendar_day_style({"WEEKEND"}, conf)
+    gutter_w      = 3 if show_wn else 0
+    block_width   = gutter_w + 20
+
+    def day_flags(d) -> set:
+        flags = set()
+        if d in due_map:
+            flags.add("DUE")
+            if d < today:
+                flags.add("OVERDUE")
+        if d == today:
+            flags.add("TODAY")
+            if "DUE" in flags:
+                flags.add("DUE_TODAY")
+        if d in scheduled_days:
+            flags.add("SCHEDULED")
+        if d.weekday() >= 5:
+            flags.add("WEEKEND")
+        return flags
+
+    def pad(t: Text, width: int) -> Text:
+        if len(t.plain) < width:
+            t.append(" " * (width - len(t.plain)))
+        return t
+
+    def render_month(year: int, month: int) -> list:
+        header = Text(f"{_cal.month_name[month]} {year}".center(block_width),
+                      style="bold white")
+        head_row = Text(" " * gutter_w)
+        for i, name in enumerate(day_names):
+            head_row.append(name, style=weekend_style if i in weekend_idx
+                             else "dim")
+            if i < 6:
+                head_row.append(" ")
+        rows = [header, head_row]
+        for week_num, week in month_weeks(year, month, monday_first):
+            row = Text()
+            if show_wn:
+                row.append(f"{week_num:2d} ", style=weeknum_style)
+            for i, d in enumerate(week):
+                if d.month != month:
+                    row.append("  ")
+                else:
+                    row.append(f"{d.day:2d}",
+                              style=calendar_day_style(day_flags(d), conf))
+                if i < 6:
+                    row.append(" ")
+            rows.append(row)
+        while len(rows) < 8:
+            rows.append(Text(""))
+        return rows
 
     months, y, m = [], now.year, now.month
     for _ in range(3):
-        months.append(render_month_text(y, m))
+        months.append(render_month(y, m))
         m += 1
         if m > 12:
             m, y = 1, y + 1
@@ -300,13 +366,17 @@ def render_calendar(tasks: List[Task]) -> Text:
     max_rows = max(len(b) for b in months)
     for b in months:
         while len(b) < max_rows:
-            b.append("")
+            b.append(Text(""))
 
     out = Text()
     for i in range(max_rows):
-        row_parts = "   ".join(f"{blk[i]:<20}" for blk in months)
-        out.append(row_parts.rstrip() + "\n",
-                   style="bold white" if i == 0 else ("dim" if i == 1 else "white"))
+        for j, blk in enumerate(months):
+            last = j == len(months) - 1
+            cell = blk[i] if last else pad(blk[i].copy(), block_width)
+            out.append_text(cell)
+            if not last:
+                out.append("   ")
+        out.append("\n")
 
     upcoming = sorted(d for d in due_map if d >= today)
     if upcoming:
@@ -316,6 +386,21 @@ def render_calendar(tasks: List[Task]) -> Text:
                 color = "red" if d == today else "yellow" if (d - today).days < 7 else "white"
                 out.append(f"  {d.strftime('%Y-%m-%d')}  ", style=f"bold {color}")
                 out.append(t.description + "\n")
+
+    if show_legend:
+        out.append("\nLegend: ", style="bold white")
+        swatches = [
+            ("today", calendar_day_style({"TODAY"}, conf)),
+            ("weekend", weekend_style),
+            ("due", calendar_day_style({"DUE"}, conf)),
+            ("due-today", calendar_day_style({"DUE", "TODAY", "DUE_TODAY"}, conf)),
+            ("overdue", calendar_day_style({"DUE", "OVERDUE"}, conf)),
+            ("scheduled", calendar_day_style({"SCHEDULED"}, conf)),
+            ("weeknumber", weeknum_style),
+        ]
+        for i, (label, style) in enumerate(swatches):
+            out.append(label, style=style)
+            out.append(", " if i < len(swatches) - 1 else ".\n")
 
     return out
 

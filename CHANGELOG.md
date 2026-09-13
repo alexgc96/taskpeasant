@@ -10,7 +10,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
-- _(nothing yet — track new features here as they land)_
+- **Calendar color parity with Taskwarrior** (`_rich.py`, `_colors.py`,
+  `_calendar_grid.py`) — `task calendar` now shades day cells to match
+  TW's `color.calendar.*` rules (today/due/due.today/overdue/scheduled/
+  weekend), adds a week-number column (`displayweeknumber`) and a
+  plain-word legend (`calendar.legend`) to both the plain-text and rich
+  rendered calendar, and fixes the rich calendar ignoring `weekstart`.
 
 ### Changed
 - _(non-breaking changes only)_

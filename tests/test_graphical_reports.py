@@ -113,6 +113,29 @@ def test_calendar_details_none(rich_yaml):
     assert "Due this period:" not in out
 
 
+def _header_line(out):
+    return next(ln for ln in out.splitlines() if "Su Mo Tu We Th Fr Sa" in ln)
+
+
+def test_calendar_weeknumber_column(rich_yaml):
+    on  = execute_command("task calendar", rich_yaml)
+    off = execute_command("task rc.displayweeknumber=0 calendar", rich_yaml)
+    # The first month block's header starts the line, so this isn't fooled
+    # by the "   " separator between month blocks producing the same
+    # substring at a block boundary.
+    assert _header_line(on).startswith("   Su Mo")
+    assert _header_line(off).startswith("Su Mo")
+
+
+def test_calendar_legend_line(rich_yaml):
+    legend = ("Legend: today, weekend, due, due-today, overdue, scheduled, "
+             "weeknumber.")
+    on  = execute_command("task calendar", rich_yaml)
+    off = execute_command("task rc.calendar.legend=0 calendar", rich_yaml)
+    assert legend in on
+    assert legend not in off
+
+
 # ── summary ───────────────────────────────────────────────────────────────────
 
 def test_summary(rich_yaml):

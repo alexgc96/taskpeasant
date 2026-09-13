@@ -48,7 +48,7 @@
 | custom reports | ✓ | ✓ | `report.<name>.columns/labels/sort/filter` in taskrc or `rc.` overrides |
 | `reports` / `columns` / `colors` / `show` / `config` | ✓ | ✓ | |
 | `context` | ✓ | ✓ | define/set/none/show/list/delete; `.read`/`.write` split |
-| `calendar` | ✓ | ✓ | `due` / `<year>` / `<month> <year>` args, weekstart, details legend |
+| `calendar` | ✓ | ✓ | `due` / `<year>` / `<month> <year>` args, weekstart, details legend, `displayweeknumber` column, `color.calendar.*` shading (today/due/due.today/overdue/scheduled/weekend), `calendar.legend` |
 | `burndown.daily/.weekly/.monthly` | ✓ | ✓ | Stacked pending/started/done + net fix rate + ETA |
 | `history` / `ghistory` ×(daily/weekly/monthly/annual) | ✓ | ✓ | Filterable |
 | `summary` / `stats` / `timesheet` / `projects` / `tags` / `udas` | ✓ | ✓ | |

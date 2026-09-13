@@ -56,6 +56,7 @@ pytest -q tests/test_compat_contract.py   # contract enforcer only
 - `conftest.py` has an `autouse` fixture that clears the ID cache before and after every test. Don't work around it.
 - Use `@pytest.mark.parametrize` for error-path and corpus tests.
 - Module-level helpers (`add()`, `uuid_of()`, `names()`, etc.) are fine per test file to keep bodies terse.
+- `execute_command()` without `config=`, and a bare `Taskrc()`, never read a real taskrc file - only `load_taskrc()` does, and only `__main__.py` calls it. So tests asserting on `DEFAULTS` values are safe from whatever's in a contributor's or CI's real config. If you do need to exercise the CLI end-to-end (like test_config_file.py's run_cli()), isolate $HOME/env first the way its home fixture does — don't call main() against a real environment ;)
 
 ---
 

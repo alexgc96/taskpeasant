@@ -102,9 +102,9 @@ def _rich_burndown(yaml_path: str) -> None:
     console.print(R.render_burndown(series, dates))
 
 
-def _rich_calendar(yaml_path: str) -> None:
+def _rich_calendar(yaml_path: str, conf: Taskrc) -> None:
     tasks = read_tasks(yaml_path)
-    console.print(R.render_calendar(tasks))
+    console.print(R.render_calendar(tasks, conf))
 
 
 _EDIT_FIELDS = ("description", "project", "priority", "status", "due",
@@ -277,7 +277,7 @@ def _main() -> None:
         return
 
     if first == "calendar":
-        _rich_calendar(yaml_path)
+        _rich_calendar(yaml_path, conf)
         return
 
     if first == "sync":

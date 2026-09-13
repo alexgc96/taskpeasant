@@ -83,11 +83,15 @@ DEFAULTS: Dict[str, str] = {
     "color.burndown.done":    "white on green",
     "color.burndown.pending": "white on red",
     "color.burndown.started": "black on yellow",
+    "rule.precedence.calendar.color": "overdue,due.today,due,scheduled,"
+                                      "today,weekend",
     "color.calendar.today":   "bold white on blue",
     "color.calendar.due":     "black on yellow",
     "color.calendar.due.today": "black on bright_yellow",
     "color.calendar.overdue": "white on red",
+    "color.calendar.scheduled": "black on cyan",
     "color.calendar.weekend": "bright_black",
+    "color.calendar.weeknumber": "black on white",
     "color.history.add":      "green",
     "color.history.done":     "blue",
     "color.history.delete":   "red",
@@ -98,7 +102,9 @@ DEFAULTS: Dict[str, str] = {
     "calendar.details":        "sparse",   # none | sparse | full
     "calendar.details.report": "list",
     "calendar.holidays":       "none",
+    "calendar.legend":         "1",
     "weekstart":               "sunday",
+    "displayweeknumber":       "1",        # TW key: top-level, not calendar.*
 
     # ── Report definitions (TW built-ins) ────────────────────────────────────
     "report.next.description": "Most urgent tasks",

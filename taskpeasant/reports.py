@@ -294,10 +294,14 @@ def _months_for_calendar(tasks: List[Task], args: List[str]) -> List[Tuple[int, 
 def cmd_calendar(tasks: List[Task], args: Optional[List[str]] = None,
                  conf: Optional["Taskrc"] = None) -> str:
     """Month-grid calendar with a due-task legend (calendar.details)."""
+    from ._calendar_grid import month_weeks
+
     now = datetime.now(timezone.utc)
     today = now.date()
     monday_first = bool(conf) and \
         conf.get("weekstart", "sunday").lower() == "monday"
+    show_wn = conf.get_bool("displayweeknumber", True) if conf else True
+    show_legend = conf.get_bool("calendar.legend", True) if conf else True
 
     due_map: dict = defaultdict(list)
     for t in tasks:
@@ -306,18 +310,20 @@ def cmd_calendar(tasks: List[Task], args: Optional[List[str]] = None,
             if dt:
                 due_map[dt.date()].append(t)
 
-    cal = calendar.Calendar(firstweekday=0 if monday_first else 6)
     day_header = "Mo Tu We Th Fr Sa Su" if monday_first \
         else "Su Mo Tu We Th Fr Sa"
+    gutter = "   " if show_wn else ""
+    block_width = len(gutter) + 20
 
     def render_month(year: int, month: int) -> list:
-        header = f"{calendar.month_name[month]} {year}".center(20)
-        rows = [header, day_header]
-        for week in cal.monthdayscalendar(year, month):
+        header = f"{calendar.month_name[month]} {year}".center(block_width)
+        rows = [header, gutter + day_header]
+        for week_num, week in month_weeks(year, month, monday_first):
             cells = []
-            for day in week:
-                cells.append("  " if day == 0 else f"{day:2d}")
-            rows.append(" ".join(cells))
+            for d in week:
+                cells.append("  " if d.month != month else f"{d.day:2d}")
+            prefix = f"{week_num:2d} " if show_wn else ""
+            rows.append(prefix + " ".join(cells))
         while len(rows) < 8:
             rows.append("")
         return rows
@@ -332,7 +338,7 @@ def cmd_calendar(tasks: List[Task], args: Optional[List[str]] = None,
         for b in chunk:
             while len(b) < max_rows:
                 b.append("")
-        lines.extend("   ".join(f"{b[i]:<20}" for b in chunk).rstrip()
+        lines.extend("   ".join(f"{b[i]:<{block_width}}" for b in chunk).rstrip()
                      for i in range(max_rows))
 
     details = conf.get("calendar.details", "sparse") if conf else "sparse"
@@ -348,6 +354,11 @@ def cmd_calendar(tasks: List[Task], args: Optional[List[str]] = None,
                 for t in due_map[d]:
                     lines.append(f"  {d.strftime('%Y-%m-%d')}  "
                                  f"{t.description}")
+
+    if show_legend:
+        lines.append("")
+        lines.append("Legend: today, weekend, due, due-today, overdue, "
+                     "scheduled, weeknumber.")
 
     return "\n".join(lines)
 

@@ -15,6 +15,12 @@ with a non-empty color wins the row style.
 
 TW color specs ("bold red on bright yellow", "color15", "rgb530",
 "gray10", "underline") are translated to rich style strings.
+
+Calendar cells use a parallel set of keys — color.calendar.today,
+color.calendar.due, color.calendar.due.today, color.calendar.overdue,
+color.calendar.scheduled, color.calendar.weekend,
+color.calendar.weeknumber — with precedence from
+`rule.precedence.calendar.color`.  See calendar_day_style() below.
 """
 
 from __future__ import annotations
@@ -171,6 +177,58 @@ def style_for_task(task: Task, conf) -> str:
             if style:
                 return style
     return ""
+
+
+# ── Calendar cells ───────────────────────────────────────────────────────────
+
+_DEFAULT_CALENDAR_PRECEDENCE = "overdue,due.today,due,scheduled,today,weekend"
+
+
+def _calendar_rule_spec(rule: str, flags: set, conf) -> str:
+    """The TW color spec for one calendar rule if `flags` matches, else ''."""
+    if rule == "overdue":
+        return conf.get("color.calendar.overdue") if "OVERDUE" in flags else ""
+    if rule == "due.today":
+        return conf.get("color.calendar.due.today") \
+            if "DUE_TODAY" in flags else ""
+    if rule == "due":
+        return conf.get("color.calendar.due") if "DUE" in flags else ""
+    if rule == "scheduled":
+        return conf.get("color.calendar.scheduled") \
+            if "SCHEDULED" in flags else ""
+    if rule == "today":
+        return conf.get("color.calendar.today") if "TODAY" in flags else ""
+    if rule == "weekend":
+        return conf.get("color.calendar.weekend") if "WEEKEND" in flags else ""
+    return ""
+
+
+def calendar_day_style(flags: set, conf) -> str:
+    """rich style for one calendar day cell ('' = default).
+
+    `flags` is a subset of {TODAY, DUE, DUE_TODAY, OVERDUE, SCHEDULED,
+    WEEKEND}.  Precedence comes from `rule.precedence.calendar.color`.
+    """
+    if conf is None or not conf.get_bool("color", True):
+        return ""
+    precedence = conf.get("rule.precedence.calendar.color",
+                          _DEFAULT_CALENDAR_PRECEDENCE)
+    for rule in (r.strip() for r in precedence.split(",")):
+        if not rule:
+            continue
+        spec = _calendar_rule_spec(rule, flags, conf)
+        if spec:
+            style = tw_style(spec)
+            if style:
+                return style
+    return ""
+
+
+def calendar_weeknumber_style(conf) -> str:
+    """rich style for the calendar's week-number column ('' = default)."""
+    if conf is None or not conf.get_bool("color", True):
+        return ""
+    return tw_style(conf.get("color.calendar.weeknumber", ""))
 
 
 def cmd_colors(conf) -> str:

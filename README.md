@@ -47,18 +47,20 @@ The CLI installs as `tp` (and `taskpeasant`). If TaskPeasant is the only task to
 ```bash
 export TASKPEASANT_FILE=~/tasks/work.yaml
 
-tp task add Write the pitch deck +work project:studio due:tomorrow priority:H
-tp task add Fix boiler +home due:-2d
-tp task 2 start
-tp task next                     # TW's urgency-ranked report
-tp task +home list               # filters compose with any report
-tp task due.before:eow ready     # attribute modifiers, TW date synonyms
-tp task 1 done
-tp task undo                     # take that back
-tp task burndown.weekly          # graphical reports
-tp task summary
-tp task rc.report.mine.columns=id,project,description.desc mine   # custom report
+tp add Write the pitch deck +work project:studio due:tomorrow priority:H
+tp add Fix boiler +home due:-2d
+tp 2 start
+tp next                          # TW's urgency-ranked report
+tp +home list                    # filters compose with any report
+tp due.before:eow ready          # attribute modifiers, TW date synonyms
+tp 1 done
+tp undo                          # take that back
+tp burndown.weekly               # graphical reports
+tp summary
+tp rc.report.mine.columns=id,project,description.desc mine   # custom report
 ```
+
+`tp` is the whole command — there is no `task` word to type. Taskwarrior muscle memory still works, though: a leading `task` (`tp task add …`) is accepted and ignored.
 
 ## Quickstart — embedded
 

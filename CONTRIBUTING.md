@@ -70,14 +70,7 @@ No linter or formatter is enforced. Match the style of the surrounding code — 
 
 ## Where to contribute
 
-Check [`docs/sprint.md`](docs/sprint.md) for the current v0.5.0 candidates:
-
-- **Atomic writes** — temp-file + rename in `write_tasks`; a crash mid-write today can truncate the file
-- **Cross-process file locking** — current locking is in-process only
-- **`task sync` stub** — no-op with a clear message, for embedders who might call it
-- **PyPI publish** — first public release prep
-
-The backlog (recurrence catch-up cap) is in the same file.
+Open work lives in [GitHub issues](https://github.com/alexgc96/taskpeasant/issues) — anything labelled `good first issue` is a fine place to start. [`docs/sprint.md`](docs/sprint.md) shows what's queued for the next sprint and what shipped recently.
 
 ---
 

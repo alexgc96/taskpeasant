@@ -79,7 +79,9 @@ pending = [t for t in tasks if t.status == "pending"]
 ### `write_tasks(yaml_path: str, tasks: list[Task]) → None`
 
 Write task list to `taskpeasant_tasks:` in the YAML file. All other keys
-in the file are preserved exactly. Thread-safe via per-file `RLock`.
+in the file are preserved exactly. Thread-safe via a per-file `RLock`;
+writes are atomic (temp file + rename) and take a cross-process lock —
+see [`storage.md`](storage.md#concurrency-and-write-safety).
 
 ```python
 tasks = tp.read_tasks("project.yaml")
@@ -108,7 +110,9 @@ for t in tasks:
 ## Commands
 
 All command functions return a human-readable string (mirrors Taskwarrior's
-stdout). They read → mutate → write atomically under the per-file lock.
+stdout). They read → mutate → write under the per-file lock, which makes
+the cycle atomic for threads in one process (not across processes — see
+[`storage.md`](storage.md#concurrency-and-write-safety)).
 Task lookup accepts any UUID prefix (4+ hex characters).
 
 ### `cmd_add`
@@ -319,5 +323,5 @@ output = tp.execute_command("task 1 done", yaml_path)
 
 ```python
 import taskpeasant
-print(taskpeasant.__version__)   # "0.4.0"
+print(taskpeasant.__version__)   # "0.5.0"
 ```

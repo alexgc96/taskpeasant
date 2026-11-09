@@ -54,14 +54,40 @@ UTC). On TW-wire export (`to_tw_export()`) they are converted to
 
 ---
 
-## Thread safety
+## Concurrency and write safety
 
-TaskPeasant uses one `threading.RLock` per file path. Concurrent reads and
-writes from different threads within the same process are safe. Cross-process
-safety is the caller's responsibility (use a file-level lock if needed).
+**Threads (one process).** TaskPeasant uses one `threading.RLock` per file
+path. Concurrent reads and writes from different threads within the same
+process are safe, and each command's read → mutate → write cycle runs under
+that lock.
 
 The lock is reentrant (`RLock`) so that `read_tasks()` can call `write_tasks()`
 internally during `waiting→pending` auto-transitions without deadlocking.
+
+**Atomic writes (0.5.0+).** `write_tasks()` writes the new content to a temp
+file in the same directory and renames it over the target (`os.replace`). A
+crash or power loss mid-write leaves the previous file intact, never a
+truncated one. The target directory must therefore be writable, not just the
+file.
+
+**Processes (0.5.0+).** Each write also takes an OS-level exclusive lock on a
+sidecar file, `<file>.lock`, next to the YAML file:
+
+| Platform | Mechanism | If the holder dies |
+|---|---|---|
+| POSIX | `fcntl.flock(LOCK_EX)` on the sidecar | Lock is released by the OS |
+| Windows | Exclusive-create of the sidecar, retried for up to 30 s, then `TimeoutError` | The sidecar is left behind — delete `<file>.lock` by hand |
+
+On POSIX the empty `<file>.lock` stays on disk between writes; that is
+expected, and it is safe to delete when nothing is running. Add it to your
+ignore rules alongside `<file>.undo`.
+
+What the cross-process lock does **not** do: it covers the write, not the
+whole read → mutate → write cycle. Two processes that both read, then both
+write, will each write a complete, valid file — but the second write wins and
+the first one's change is lost. If several processes mutate the same file,
+serialise them yourself (one writer process, or your own lock around each
+command).
 
 ---
 

@@ -7,31 +7,23 @@
 
 ## Current sprint
 
-_Sprint:_ (between sprints — v0.4.0 shipped)
+_Sprint:_ (between sprints — v0.5.0 shipped)
 _Dates:_ —
 _Goal:_ —
 
 ---
 
-## Next sprint — v0.5.0 candidates
+## Next sprint — candidates
 
-_Promote to active when ready to cut a new sprint._
+_Promote to active when ready to cut a new sprint. Open work is tracked in
+[GitHub issues](https://github.com/alexgc96/taskpeasant/issues)._
 
-- [ ] **Atomic writes** — temp-file + rename in `write_tasks`; a crash
-  mid-write today can truncate the file.
-- [ ] **Cross-process file locking** — current locking is in-process only;
-  concurrent writers from separate processes can race.
-- [ ] **`task sync` stub** — no-op with a clear message, sets expectations
-  for embedders who might call it.
-- [ ] **PyPI publish** — first public release; tag `v0.5.0`, push to PyPI.
+- [ ] **Git-as-sync testing** (#10) — try syncing the task YAML through a
+  git remote; results become issues or docs.
 
 ## Backlog
 
 _(Unscheduled. Promote when ready.)_
-
-- Recurrence: catch-up cap — `recurrence.limit` only applies to future
-  instances; a long-dormant file can still synthesize many past-due children
-  at once.
 
 ---
 
@@ -39,6 +31,11 @@ _(Unscheduled. Promote when ready.)_
 
 _(Most recent first. Trim entries once they roll into a release in `CHANGELOG.md`.)_
 
+- **0.5.0** — hardening: atomic writes (temp file + rename), cross-process
+  write lock (`<file>.lock` sidecar), `tp sync` stub, ID-cache cap,
+  `py.typed` + annotation sweep, Taskwarrior calendar color parity (week
+  numbers, legend, `color.calendar.*`), recurrence catch-up cap
+  (`recurrence.catchup.limit`), tests for the remaining rich renderers.
 - **0.4.0** — TW parity sprint 3: taskrc config system (`show`, `config`
   commands, `rc.key=val` overrides, layered search order), full report
   engine with all TW built-ins + custom reports, filter parity (attribute

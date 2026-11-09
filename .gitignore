@@ -35,6 +35,7 @@ tmp/
 *.local.yaml
 tasks.yaml
 tasks.yaml.undo
+tasks.yaml.lock
 .claude/
 package.json
 package-lock.json

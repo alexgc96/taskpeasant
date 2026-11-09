@@ -9,6 +9,16 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+_(nothing yet)_
+
+---
+
+## [0.5.0] — 2026-11-09
+
+The hardening release: safer writes, a calendar that looks like
+Taskwarrior's, and a bounded recurrence catch-up. Nothing in the frozen
+contract (`docs/BACKWARDS_COMPAT.md`) changes.
+
 ### Added
 - **Calendar color parity with Taskwarrior** (`_rich.py`, `_colors.py`,
   `_calendar_grid.py`) — `task calendar` now shades day cells to match
@@ -16,15 +26,54 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   weekend), adds a week-number column (`displayweeknumber`) and a
   plain-word legend (`calendar.legend`) to both the plain-text and rich
   rendered calendar, and fixes the rich calendar ignoring `weekstart`.
+  New keys: `rule.precedence.calendar.color`, `color.calendar.scheduled`,
+  `color.calendar.weeknumber`, `calendar.legend`, `displayweeknumber`.
+  (#11, #18)
+- **`tp sync` stub** — the CLI answers `sync` with a short "intentionally
+  not implemented" message and local-first alternatives (git, rsync, a
+  shared drive) instead of treating the word as a filter. (#8, #14)
+- **`py.typed` marker** and a type-annotation sweep over the public API,
+  so type checkers pick up TaskPeasant's annotations in host apps
+  (PEP 561). Signatures are unchanged at runtime. (#16)
+- **`recurrence.catchup.limit`** (default `2`, `0` = no cap) — see
+  Changed. (#9)
 
 ### Changed
-- _(non-breaking changes only)_
+- **Recurrence catch-up is now capped** (only affects hosts that set
+  `recurrence=on`). A recurring template that has fallen behind used to
+  get every missed occurrence created by the next command — a daily task
+  in a file untouched for a year meant 365 new tasks at once. Now each
+  command creates at most `recurrence.catchup.limit` past-due children
+  per template (oldest first) and the rest follow on later commands. Set
+  `recurrence.catchup.limit=0` for the old behaviour. `synthesize_tasks()`
+  called directly is uncapped unless `catchup_limit=` is passed. (#9)
+- The CLI no longer runs the recurrence pass twice for commands it hands
+  to the parser (`count`, `add`, `done`, …).
 
 ### Fixed
-- _(bug fixes)_
+- **Atomic writes** — `write_tasks` writes to a temp file in the same
+  directory and renames it over the target, so a crash mid-write can no
+  longer truncate the YAML file. (#6, #12)
+- **Cross-process write lock** — writes take an OS-level exclusive lock
+  on a `<file>.lock` sidecar (`fcntl.flock` on POSIX, an exclusive-create
+  sidecar with a 30 s timeout on Windows) on top of the in-process
+  `RLock`, so two processes can't write the same file at the same time.
+  See `docs/storage.md` for what this does and doesn't guarantee. (#7, #17)
+- **ID cache growth** — the ephemeral-ID cache is capped at 256 entries
+  (oldest evicted first) instead of growing by one entry per write for
+  the life of a long-running host process. (#13, #15)
 
-### Removed
-- _(deprecations and removals)_
+### Tests
+- Rich renderers other than the calendar (`render_report`, `render_list`,
+  `render_info`, `render_history`, `render_ghistory`, `render_burndown`,
+  `confirm`, `error`) are now covered. (#19)
+
+### Docs
+- README, `docs/cli.md` and the landing page now show the CLI the way
+  it's meant to be typed — `tp add …`, `tp 1 done` — and say outright
+  that the leading `task` word is optional.
+- `docs/storage.md` documents atomic writes, the `<file>.lock` sidecar
+  and the limits of the cross-process lock.
 
 ---
 
@@ -215,7 +264,8 @@ Initial extraction from the [analogtrsh Studio OS](https://github.com/alexgc96/a
 - YAML storage under dedicated `taskpeasant_tasks:` key with per-file locking and legacy `tasks:`-as-list fallback.
 - Date aliases: `today`, `tomorrow`, `yesterday`, `eow`, `eom`, weekday names.
 
-[Unreleased]: https://github.com/alexgc96/taskpeasant/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/alexgc96/taskpeasant/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/alexgc96/taskpeasant/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/alexgc96/taskpeasant/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/alexgc96/taskpeasant/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/alexgc96/taskpeasant/compare/v0.1.0...v0.2.0

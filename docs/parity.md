@@ -1,6 +1,6 @@
 # Taskwarrior Parity Matrix
 
-> Status as of TaskPeasant **0.4.0**.
+> Status as of TaskPeasant **0.5.0**.
 > ✓ = supported · ~ = partial / different implementation · ✗ = not supported
 >
 > The reference is Taskwarrior 2.6.x (GothenburgBitFactory/taskwarrior,
@@ -53,7 +53,7 @@
 | `history` / `ghistory` ×(daily/weekly/monthly/annual) | ✓ | ✓ | Filterable |
 | `summary` / `stats` / `timesheet` / `projects` / `tags` / `udas` | ✓ | ✓ | |
 | `version` / aliases (`alias.*`) | ✓ | ✓ | Alias expands the first command token |
-| `sync` | ✓ | ✗ | **Intentional** — TaskPeasant is local-first; the YAML file is the sync surface |
+| `sync` | ✓ | ✗ | **Intentional** — TaskPeasant is local-first; the YAML file is the sync surface. `tp sync` prints a short explanation with alternatives (CLI only) |
 | `diagnostics` / `execute` / `calc` | ✓ | ✗ | Low value in an embedded engine |
 | Hooks (`on-add`, `on-modify`, …) | ✓ | ✗ | Host apps embed the library and hook in Python instead |
 
@@ -115,6 +115,22 @@ the status enum, so `recur:` is rejected until the host sets
 `monthly`, `3d`, `2w`, `1y`, …), catch-up synthesis plus
 `recurrence.limit` (default 1) future instances, `until` stops spawning
 and expires open tasks.
+
+Unlike TW, catch-up is rate-limited: each command creates at most
+`recurrence.catchup.limit` (default 2) past-due children per template,
+oldest first, so a file that sat untouched for months fills in over the
+next few commands instead of all at once. Set it to `0` for TW's
+create-everything behaviour.
+
+Two consequences worth knowing:
+
+- While a template is still catching up, its upcoming (future) instance
+  is not created yet — children are made strictly oldest-first so their
+  indexes stay contiguous. TW, which creates everything in one pass,
+  always shows the upcoming one.
+- `0` or a negative value means no cap. A value that isn't a whole
+  number (`recurrence.catchup.limit=abc`) is ignored and the default of
+  2 applies.
 
 ## Color rules
 

@@ -23,6 +23,21 @@ export TASKPEASANT_FILE=~/tasks/work.yaml   # set once, use everywhere
 
 All examples below omit `--file` for brevity.
 
+**No `task` prefix needed.** `tp` is the command; what follows is the
+Taskwarrior grammar without the word `task` in front:
+
+```bash
+tp add buy milk +shop due:tomorrow
+tp 1 done
+tp next
+```
+
+A leading `task` is accepted and ignored (`tp task add …` is the same as
+`tp add …`), so pasted Taskwarrior commands keep working. The grammar
+blocks below are written TW-style (`task add <description> …`) — read the
+`task` there as `tp`. When embedding, `execute_command("task add …")` and
+`execute_command("add …")` are equivalent too.
+
 ---
 
 ## Task identifiers
@@ -33,8 +48,8 @@ Every command that targets an existing task accepts either:
 - **UUID prefix** — first 4+ hex characters of the UUID (`8c2f`, `8c2f1a3b`)
 
 ```bash
-tp task 3 done           # integer ID
-tp task 8c2f1a3b done    # UUID prefix
+tp 3 done           # integer ID
+tp 8c2f1a3b done    # UUID prefix
 ```
 
 ---
@@ -49,10 +64,10 @@ task add <description> [+tag] [due:<date>] [scheduled:<date>] [wait:<date>]
 ```
 
 ```bash
-tp task add render the final shot +urgent due:tomorrow priority:H project:studio
-tp task add review PR +next due:+3d
-tp task add plan sprint wait:+7d project:studio
-tp task add deploy release due:eom priority:M
+tp add render the final shot +urgent due:tomorrow priority:H project:studio
+tp add review PR +next due:+3d
+tp add plan sprint wait:+7d project:studio
+tp add deploy release due:eom priority:M
 ```
 
 ### done
@@ -94,7 +109,7 @@ task <id> annotate <text>
 ```
 
 ```bash
-tp task 2 annotate blocked waiting on design approval
+tp 2 annotate blocked waiting on design approval
 ```
 
 ### modify
@@ -104,18 +119,18 @@ task <id> modify [+tag] [-tag] [field:<value>] …
 ```
 
 ```bash
-tp task 3 modify priority:H due:+2d
-tp task 3 modify +urgent -someday project:studio
-tp task 3 modify description:updated description text
+tp 3 modify priority:H due:+2d
+tp 3 modify +urgent -someday project:studio
+tp 3 modify description:updated description text
 ```
 
 **Clearing fields** — an empty value removes the field (TW convention):
 
 ```bash
-tp task 3 modify due:            # remove the due date
-tp task 3 modify wait:           # release a waiting task back to pending
-tp task 3 modify project: priority:
-tp task 3 modify my_uda:         # delete the UDA entirely
+tp 3 modify due:            # remove the due date
+tp 3 modify wait:           # release a waiting task back to pending
+tp 3 modify project: priority:
+tp 3 modify my_uda:         # delete the UDA entirely
 ```
 
 A blank `description:` is rejected.
@@ -125,10 +140,10 @@ or UUID prefixes; prefix an item with `-` to remove it, or pass an empty
 value to clear all:
 
 ```bash
-tp task 1 modify depends:2          # task 1 now depends on task 2
-tp task 1 modify depends:8c2f,5     # add two dependencies
-tp task 1 modify depends:-2         # remove one
-tp task 1 modify depends:           # clear all
+tp 1 modify depends:2          # task 1 now depends on task 2
+tp 1 modify depends:8c2f,5     # add two dependencies
+tp 1 modify depends:-2         # remove one
+tp 1 modify depends:           # clear all
 ```
 
 Self-dependencies and circular chains are rejected. Dependencies feed the
@@ -141,15 +156,15 @@ Any [filter expression](#filter-syntax) may precede a mutation verb
 every match:
 
 ```bash
-tp task +urgent done
-tp task project:film delete
-tp task "(+OVERDUE or +TODAY)" modify priority:H
-tp task project:studio annotate sprint slipped a week
+tp +urgent done
+tp project:film delete
+tp "(+OVERDUE or +TODAY)" modify priority:H
+tp project:studio annotate sprint slipped a week
 ```
 
 Rules:
 
-- A bare verb with **no filter** (`tp task done`) is a description search,
+- A bare verb with **no filter** (`tp done`) is a description search,
   never a filterless bulk operation.
 - Filter tokens the engine cannot evaluate **abort** the operation rather
   than silently matching everything.
@@ -158,7 +173,7 @@ Rules:
 - The `tp` CLI asks for confirmation when more than one task would be
   touched; pass `--yes` to skip (the programmatic `execute_command` path
   applies without prompting and reports what changed).
-- Integer-ID and UUID-prefix commands (`tp task 3 done`) keep their
+- Integer-ID and UUID-prefix commands (`tp 3 done`) keep their
   single-target behaviour.
 
 ### info
@@ -170,7 +185,7 @@ task <id> info
 Full detail view — all fields, annotations, urgency score.
 
 ```bash
-tp task 1 info
+tp 1 info
 ```
 
 ---
@@ -188,10 +203,10 @@ Pending tasks sorted by urgency, top 25. This is the default when no command
 is given.
 
 ```bash
-tp task
-tp task next
-tp task next +urgent
-tp task next project:studio
+tp
+tp next
+tp next +urgent
+tp next project:studio
 ```
 
 ### task all
@@ -227,8 +242,8 @@ task count [filter tokens…]
 Returns a plain integer — no table.
 
 ```bash
-tp task count status:pending
-tp task count project:studio
+tp count status:pending
+tp count project:studio
 ```
 
 ### task export
@@ -240,8 +255,8 @@ task [filter tokens…] export
 JSON array in Taskwarrior wire format. Useful for scripting.
 
 ```bash
-tp task +urgent export
-tp task status:pending export | python3 -c "import sys,json; [print(t['description']) for t in json.load(sys.stdin)]"
+tp +urgent export
+tp status:pending export | python3 -c "import sys,json; [print(t['description']) for t in json.load(sys.stdin)]"
 ```
 
 ---
@@ -253,15 +268,15 @@ supported with `and`, `or`, `xor`, `not` (case-insensitive) and
 parenthesised groups:
 
 ```bash
-tp task "+urgent or +next"
-tp task "(project:film or project:web) and not +BLOCKED"
-tp task "+TAGGED xor +ANNOTATED"
+tp "+urgent or +next"
+tp "(project:film or project:web) and not +BLOCKED"
+tp "+TAGGED xor +ANNOTATED"
 ```
 
 Precedence: `not` > `and` (explicit or juxtaposition) > `xor` > `or`,
 left-associative. Because `and`/`or`/`xor`/`not` are operators, quote a
 filter if you need to search for those words literally in a description
-(e.g. `tp task "fix or-gate"` — any token containing more than the bare
+(e.g. `tp "fix or-gate"` — any token containing more than the bare
 keyword is a normal search word).
 
 | Token | Matches |
@@ -286,11 +301,11 @@ keyword is a normal search word).
 | bare word | description contains this word (case-insensitive) |
 
 ```bash
-tp task +urgent due.before:+7d
-tp task project:studio priority:H
-tp task render                      # description contains "render"
-tp task count due.none: status:pending
-tp task tag.any:render,edit
+tp +urgent due.before:+7d
+tp project:studio priority:H
+tp render                      # description contains "render"
+tp count due.none: status:pending
+tp tag.any:render,edit
 ```
 
 ### Virtual tags
@@ -313,12 +328,12 @@ never stored, and usable anywhere a `+tag`/`-tag` filter is:
 | `+BLOCKING` | at least one open task depends on it |
 
 ```bash
-tp task +OVERDUE                    # everything past due
-tp task "+DUE and not +BLOCKED"     # actionable soon
-tp task +OVERDUE done               # bulk-complete the backlog
+tp +OVERDUE                    # everything past due
+tp "+DUE and not +BLOCKED"     # actionable soon
+tp +OVERDUE done               # bulk-complete the backlog
 ```
 
-Real tags may not reuse virtual names (`tp task 3 modify +OVERDUE` is
+Real tags may not reuse virtual names (`tp 3 modify +OVERDUE` is
 rejected).
 
 ---
@@ -393,6 +408,22 @@ still silently ignored, so existing TW command strings work unchanged.
 
 ---
 
+## 0.5.0 — hardening
+
+- **`tp sync`** prints a short "intentionally not implemented" note with
+  local-first alternatives (git, rsync, a shared drive).
+- **Calendar** shading follows TW's `color.calendar.*` rules; new keys
+  `displayweeknumber` (week-number column, default on),
+  `calendar.legend` (default on), `color.calendar.scheduled`,
+  `color.calendar.weeknumber`, `rule.precedence.calendar.color`.
+- **Recurrence catch-up cap**: `recurrence.catchup.limit` (default `2`,
+  `0` = no cap) — the most past-due instances one command will create
+  per recurring task.
+- Writes are atomic and locked across processes; a `<file>.lock` sidecar
+  appears next to the YAML file (see [`storage.md`](storage.md)).
+
+---
+
 ## 0.4.0 — the Taskwarrior-parity release
 
 The CLI now covers most of stock Taskwarrior. Highlights (see
@@ -419,3 +450,5 @@ The CLI now covers most of stock Taskwarrior. Highlights (see
   `task context …`, color rules, `urgency.*` coefficients.
 - **Recurrence** (opt-in): set `recurrence=on`, then
   `task add pay rent due:1st recur:monthly until:2027-01-01`.
+  Missed instances are created at most `recurrence.catchup.limit`
+  (default 2) per command since 0.5.0.

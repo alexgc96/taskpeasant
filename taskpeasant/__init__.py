@@ -17,7 +17,7 @@ from .undo import cmd_undo
 from ._taskrc import Taskrc, load_taskrc
 from .peasant_parser import execute_command
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 __all__ = [
     "Task", "read_tasks", "write_tasks", "assign_ids",

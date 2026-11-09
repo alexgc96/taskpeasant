@@ -130,8 +130,12 @@
   </div>
   <div class="parchment">
     <h2>Quickstart</h2>
-    <p>The CLI installs as <code>tp</code> (and <code>taskpeasant</code>). We deliberately don't claim the <code>task</code> name, so a real Taskwarrior install can coexist — <code>alias task=tp</code> completes the illusion if taskpeasant is the only task tool on the machine.</p>
+    <p>The CLI installs as <code>tp</code> (and <code>taskpeasant</code>). We deliberately don't claim the <code>task</code> name, so a real Taskwarrior install can coexist — <code>alias task=tp</code> completes the illusion if taskpeasant is the only task tool on the machine. There is no <code>task</code> prefix to type: <code>tp</code> is the whole command, though a leading <code>task</code> is accepted and ignored for Taskwarrior muscle memory.</p>
     <pre>export TASKPEASANT_FILE=~/tasks/work.yaml
+
+tp add render the final shot +urgent due:tomorrow
+tp next
+tp 1 done
 
 # the TW-style CLI parser returns plain text for your terminal widget:
 print(execute_command("task add render the final shot +urgent due:tomorrow", yaml_path))

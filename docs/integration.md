@@ -73,6 +73,14 @@ Treat as a breaking change if the old behaviour might have been depended on. Oth
 
 No migration. This is the baseline. Studio OS was previously importing from `app.taskpeasant`; after this extraction it imports from the installed `taskpeasant` package. Both paths are valid during the transition — see `app/routes/tasks.py:54` for the import pattern.
 
+### → 0.5.0
+
+No migration; the frozen contract is untouched. Three things an embedder may notice:
+
+- **A `<file>.lock` sidecar** now appears next to every YAML file TaskPeasant writes (cross-process write lock), and writes go through a temp file in the same directory before an atomic rename. Ignore the sidecar in version control, and make sure the directory — not just the file — is writable. Details in [`storage.md`](storage.md#concurrency-and-write-safety).
+- **Recurrence catch-up is capped** — only if you opted in with `recurrence=on`. At most `recurrence.catchup.limit` (default 2) past-due children are created per template per command. Set it to `0` to keep the pre-0.5 behaviour.
+- **Type checkers see TaskPeasant's annotations** (`py.typed`). If your host is type-checked, calls that were silently `Any` before may now be flagged.
+
 ---
 
 ## Embedding checklist (for non–Studio-OS hosts)
@@ -84,6 +92,6 @@ If you're adding TaskPeasant to a fresh app, the minimum integration is:
 3. Wire your UI to call `execute_command(user_input, yaml_path)` and display the returned string.
 4. For machine-readable data (e.g. drawing a Kanban board), call `cmd_export(yaml_path, filter_tokens)` and consume the TW-wire-format dicts directly.
 5. Guard imports with `try/except ImportError` if TaskPeasant is optional.
-6. Pin to a MINOR-compatible range in your manifest: `taskpeasant>=0.1,<0.2`.
+6. Pin to a MINOR-compatible range in your manifest: `taskpeasant>=0.5,<0.6`.
 
 That's it. No daemon, no config file, no init step.

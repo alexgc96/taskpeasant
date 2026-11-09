@@ -161,7 +161,11 @@ def execute_command(raw: str, yaml_path: str, config: Optional[Taskrc] = None) -
         return f"Error: {e}"
 
 
-def _execute_command(raw: str, yaml_path: str, config: Taskrc = None) -> str:
+def _execute_command(raw: str, yaml_path: str, config: Taskrc = None,
+                     synthesized: bool = False) -> str:
+    # synthesized: the caller (the CLI) already ran the recurrence pass for
+    # this invocation, so don't run a second one here — keeps
+    # recurrence.catchup.limit per invocation.
     try:
         tokens = shlex.split(raw)
     except ValueError as e:
@@ -187,7 +191,7 @@ def _execute_command(raw: str, yaml_path: str, config: Taskrc = None) -> str:
 
     # Recurrence is opt-in (compat contract §7): synthesize child
     # instances / expire until-dated tasks before dispatching.
-    if conf.get_bool("recurrence"):
+    if conf.get_bool("recurrence") and not synthesized:
         from .recurrence import synthesize
         synthesize(yaml_path, conf)
 

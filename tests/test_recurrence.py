@@ -102,10 +102,79 @@ def test_overdue_template_catches_up(yaml_file, make_task):
     tpl = make_task(description="catch up", status="recurring",
                     recur="daily", due=iso(now_utc() - timedelta(days=3)))
     write_tasks(yaml_file, [tpl])
-    x(f"task {RC_ON} list", yaml_file)
+    x(f"task {RC_ON} rc.recurrence.catchup.limit=0 list", yaml_file)
     kids = [t for t in read_tasks(yaml_file) if t.parent == tpl.uuid]
-    # 4 arrived occurrences (-3d..today) + 1 future
+    # uncapped: 4 arrived occurrences (-3d..today) + 1 future
     assert len(kids) == 5
+
+
+def _dormant_daily(yaml_file, make_task, days=6):
+    """A daily template last touched `days` ago: days+1 arrived
+    occurrences (indexes 0..days) are owed, plus one future instance."""
+    from taskpeasant.storage import write_tasks
+    tpl = make_task(description="dormant", status="recurring",
+                    recur="daily", due=iso(now_utc() - timedelta(days=days)))
+    write_tasks(yaml_file, [tpl])
+    return tpl
+
+
+def _child_indexes(yaml_file, tpl):
+    return sorted(int(t.imask) for t in read_tasks(yaml_file)
+                  if t.parent == tpl.uuid)
+
+
+def test_catchup_capped_per_command_by_default(yaml_file, make_task):
+    tpl = _dormant_daily(yaml_file, make_task)
+    x(f"task {RC_ON} list", yaml_file)
+    # default recurrence.catchup.limit=2: oldest two only, no future yet
+    assert _child_indexes(yaml_file, tpl) == [0, 1]
+    x(f"task {RC_ON} list", yaml_file)
+    assert _child_indexes(yaml_file, tpl) == [0, 1, 2, 3]
+
+
+def test_catchup_converges_then_adds_future_instance(yaml_file, make_task):
+    tpl = _dormant_daily(yaml_file, make_task)
+    for _ in range(4):                      # 7 owed at 2 per command
+        x(f"task {RC_ON} list", yaml_file)
+    # indexes 0..6 have arrived, 7 is the one future instance
+    assert _child_indexes(yaml_file, tpl) == list(range(8))
+    x(f"task {RC_ON} list", yaml_file)      # caught up: nothing more
+    assert _child_indexes(yaml_file, tpl) == list(range(8))
+    template = next(t for t in read_tasks(yaml_file) if t.uuid == tpl.uuid)
+    assert template.mask == "-" * 8
+
+
+def test_catchup_limit_is_configurable(yaml_file, make_task):
+    tpl = _dormant_daily(yaml_file, make_task)
+    x(f"task {RC_ON} rc.recurrence.catchup.limit=5 list", yaml_file)
+    assert _child_indexes(yaml_file, tpl) == [0, 1, 2, 3, 4]
+
+
+def test_catchup_limit_garbage_falls_back_to_default(yaml_file, make_task):
+    tpl = _dormant_daily(yaml_file, make_task)
+    x(f"task {RC_ON} rc.recurrence.catchup.limit=abc list", yaml_file)
+    assert _child_indexes(yaml_file, tpl) == [0, 1]
+
+
+def test_catchup_cap_is_per_template(yaml_file, make_task):
+    from taskpeasant.storage import write_tasks
+    a = make_task(description="a", status="recurring", recur="daily",
+                  due=iso(now_utc() - timedelta(days=6)))
+    b = make_task(description="b", status="recurring", recur="daily",
+                  due=iso(now_utc() - timedelta(days=6)))
+    write_tasks(yaml_file, [a, b])
+    x(f"task {RC_ON} list", yaml_file)
+    assert _child_indexes(yaml_file, a) == [0, 1]
+    assert _child_indexes(yaml_file, b) == [0, 1]
+
+
+def test_synthesize_tasks_uncapped_unless_asked(make_task):
+    tpl = make_task(status="recurring", recur="daily",
+                    due=iso(now_utc() - timedelta(days=6)))
+    kids, _ = synthesize_tasks([tpl])       # direct callers: no cap
+    assert len(kids) == 8
+    kids, _ = synthesize_tasks([tpl], catchup_limit=3)
+    assert [int(k.imask) for k in kids] == [0, 1, 2]
 
 
 def test_no_duplicate_spawning(yaml_file):
@@ -181,3 +250,20 @@ def test_synthesized_children_visible_in_next(yaml_file):
     x(f"task {RC_ON} add water plants due:today recur:weekly", yaml_file)
     out = x(f"task {RC_ON} next", yaml_file)
     assert "water plants" in out
+
+
+def test_cli_catchup_cap_is_per_invocation(tmp_path, monkeypatch, make_task):
+    """The CLI runs its own recurrence pass before handing some commands
+    to the parser; the two must not add up to double the cap."""
+    import taskpeasant.__main__ as M
+    monkeypatch.setenv("HOME", str(tmp_path))
+    for var in ("XDG_CONFIG_HOME", "TASKPEASANT_CONFIG", "TASKPEASANT_TASKRC",
+                "TASKRC", "TASKPEASANT_FILE"):
+        monkeypatch.delenv(var, raising=False)
+    path = str(tmp_path / "tasks.yaml")
+    tpl = _dormant_daily(path, make_task)
+    # `count` is delegated to the parser, `list` is rendered by the CLI
+    for i, cmd in enumerate(("count", "list"), start=1):
+        monkeypatch.setattr("sys.argv", ["tp", "--file", path, RC_ON, cmd])
+        M.main()
+        assert _child_indexes(path, tpl) == list(range(2 * i))

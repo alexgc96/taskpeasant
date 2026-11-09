@@ -21,7 +21,8 @@ from rich.prompt import Confirm
 from . import _rich as R
 from ._dates import parse_date
 from ._taskrc import Taskrc, extract_rc_overrides, load_taskrc
-from .peasant_parser import execute_command, _resolve_id, _is_uuid, _split_bulk
+from .peasant_parser import (_execute_command, _resolve_id, _is_uuid,
+                             _split_bulk)
 from .query import FilterError, apply_filter
 from .reports import _build_buckets, cmd_burndown
 from .storage import read_tasks, assign_ids
@@ -176,6 +177,15 @@ def _cli_edit(yaml_path: str, uuid_prefix: str) -> None:
     console.print(R.confirm(f"Edited task {t.uuid[:8]}  '{t.description}'"))
 
 
+def _execute(raw: str, yaml_path: str, conf) -> str:
+    """execute_command for the CLI.  main() has already run the recurrence
+    pass for this invocation, so the parser is told to skip its own."""
+    try:
+        return _execute_command(raw, yaml_path, conf, synthesized=True)
+    except Exception as e:
+        return f"Error: {e}"
+
+
 def main() -> None:
     try:
         _main()
@@ -250,7 +260,7 @@ def _main() -> None:
             (_base in _graphical_bases and "." in first) or \
             (first == "calendar" and len(tokens) > 1):
         raw = "task " + " ".join(shlex.quote(t) for t in tokens)
-        console.print(execute_command(raw, yaml_path, config=conf),
+        console.print(_execute(raw, yaml_path, conf),
                       highlight=False, markup=False)
         return
 
@@ -306,7 +316,7 @@ def _main() -> None:
     if first in ("undo", "log", "version") or \
             (first == "purge" and len(tokens) == 1):
         raw = "task " + " ".join(shlex.quote(t) for t in tokens)
-        result = execute_command(raw, yaml_path, config=conf)
+        result = _execute(raw, yaml_path, conf)
         if result.startswith("Error") or result.startswith("No "):
             console.print(R.error(result))
         else:
@@ -319,8 +329,7 @@ def _main() -> None:
         if len(tokens) == 2 and os.path.isfile(tokens[1]):
             with open(tokens[1], encoding="utf-8") as f:
                 payload = f.read()
-        result = execute_command("task import " + payload, yaml_path,
-                                 config=conf)
+        result = _execute("task import " + payload, yaml_path, conf)
         console.print(R.error(result) if result.startswith("Error")
                       else R.confirm(result))
         return
@@ -378,7 +387,7 @@ def _main() -> None:
                 return
         # Mutation path — run through execute_command, pretty-print result
         raw = "task " + " ".join(shlex.quote(t) for t in tokens)
-        result = execute_command(raw, yaml_path, config=conf)
+        result = _execute(raw, yaml_path, conf)
         if result.startswith("Error") or result.startswith("No task") or result.startswith("Parse"):
             console.print(R.error(result))
         else:

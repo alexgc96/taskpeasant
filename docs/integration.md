@@ -75,8 +75,9 @@ No migration. This is the baseline. Studio OS was previously importing from `app
 
 ### → 0.5.0
 
-No migration; the frozen contract is untouched. Three things an embedder may notice:
+No API migration; the frozen contract is untouched. Four things an embedder may notice:
 
+- **Python 3.10+ is required.** pip will not install 0.5.0 on Python 3.9; a host still on 3.9 stays on 0.4.0.
 - **A `<file>.lock` sidecar** now appears next to every YAML file TaskPeasant writes (cross-process write lock), and writes go through a temp file in the same directory before an atomic rename. Ignore the sidecar in version control, and make sure the directory — not just the file — is writable. Details in [`storage.md`](storage.md#concurrency-and-write-safety).
 - **Recurrence catch-up is capped** — only if you opted in with `recurrence=on`. At most `recurrence.catchup.limit` (default 2) past-due children are created per template per command. Set it to `0` to keep the pre-0.5 behaviour.
 - **Type checkers see TaskPeasant's annotations** (`py.typed`). If your host is type-checked, calls that were silently `Any` before may now be flagged.

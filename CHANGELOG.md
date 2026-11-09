@@ -39,6 +39,9 @@ contract (`docs/BACKWARDS_COMPAT.md`) changes.
   Changed. (#9)
 
 ### Changed
+- **Python 3.10 or newer is now required.** 3.9 is past end-of-life and
+  can no longer be tested in CI; `requires-python` is `>=3.10` and the
+  test matrix is 3.10–3.14. Hosts still on 3.9 should stay on 0.4.0.
 - **Recurrence catch-up is now capped** (only affects hosts that set
   `recurrence=on`). A recurring template that has fallen behind used to
   get every missed occurrence created by the next command — a daily task

@@ -8,7 +8,7 @@ version         = "0.4.0"
 description     = "Taskwarrior logic ported to Python, as close as we could get. YAML-native task engine for local-first apps."
 readme          = "README.md"
 license         = { text = "GPL-3.0-or-later" }
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors         = [{ name = "analogtrsh studio" }]
 keywords        = ["taskwarrior", "tasks", "todo", "yaml", "local-first"]
 classifiers     = [

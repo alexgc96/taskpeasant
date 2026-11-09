@@ -39,6 +39,7 @@ DEFAULTS: Dict[str, str] = {
     "default.command": "list",
     "confirmation": "1",
     "recurrence":   "0",     # TW default is on; TP is opt-in (compat contract)
+    "recurrence.catchup.limit": "2",   # past-due children per command; 0 = no cap
     "due":          "7",     # days horizon for the +DUE virtual tag
     "dateformat":   "Y-M-D",
     "defaultwidth": "80",

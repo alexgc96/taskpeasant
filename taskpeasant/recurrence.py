@@ -14,6 +14,11 @@ Taskrc instance).  When enabled:
   (default 1) upcoming ones.  Children are plain pending tasks carrying
   parent=<template uuid>, imask=<index>, recur and until copies.
 
+  Catch-up is rate-limited: at most `recurrence.catchup.limit` (default
+  2, 0 = no cap) past-due children are created per template per command,
+  so a long-dormant file catches up over the next few commands instead
+  of flooding the list in one go.
+
   The template's `mask` records one character per generated child:
   '-' pending, '+' completed, 'X' deleted, 'W' waiting (TW's encoding).
 
@@ -146,9 +151,15 @@ def _spawn_child(tpl: Task, due_dt: datetime, index: int) -> Task:
 
 
 def synthesize_tasks(tasks: List[Task], limit: int = 1,
-                     now: Optional[datetime] = None) -> Tuple[list, bool]:
+                     now: Optional[datetime] = None,
+                     catchup_limit: int = 0) -> Tuple[list, bool]:
     """Generate missing children for every recurring template, refresh
     template masks, and expire tasks whose `until` has passed.
+
+    catchup_limit caps how many past-due children one call creates per
+    template (0 = no cap).  Hitting the cap stops that template for this
+    call — later occurrences wait for the next one — so child indexes
+    stay contiguous.
 
     Returns (new_children, changed_existing).
     """
@@ -188,6 +199,7 @@ def synthesize_tasks(tasks: List[Task], limit: int = 1,
                 pass
 
         futures = 0
+        caught_up = 0
         k = 0
         while k < 1000:
             due_k = nth_occurrence(base, tpl.recur, k)
@@ -196,6 +208,10 @@ def synthesize_tasks(tasks: List[Task], limit: int = 1,
             if until_dt and due_k > until_dt:
                 break
             if k not in existing:
+                if due_k <= now:
+                    if 0 < catchup_limit <= caught_up:
+                        break
+                    caught_up += 1
                 new_children.append(_spawn_child(tpl, due_k, k))
             if due_k > now:
                 futures += 1
@@ -233,7 +249,8 @@ def synthesize(yaml_path: str, conf) -> None:
         if not any(t.status == "recurring" or t.until for t in tasks):
             return
         new_children, changed = synthesize_tasks(
-            tasks, conf.get_int("recurrence.limit", 1))
+            tasks, conf.get_int("recurrence.limit", 1),
+            catchup_limit=conf.get_int("recurrence.catchup.limit", 2))
         if new_children or changed:
             write_tasks(yaml_path, tasks + new_children)
     except Exception:

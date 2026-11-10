@@ -9,7 +9,14 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-_(nothing yet)_
+### Tests
+- **Storage guarantees** (`tests/test_storage.py`): cover the atomic-write
+  and cross-process-lock behaviour shipped in 0.5.0: a failed replace or dump
+  leaves the original file intact with no stray `.tmp` files, a normal write
+  leaves no temp files, sibling keys survive an atomic write, the lock is
+  re-entrant in one thread, `_win_exclusive` raises `TimeoutError` when the
+  sidecar already exists, and a second process blocks until the holder
+  releases the POSIX flock. (#23)
 
 ---
 

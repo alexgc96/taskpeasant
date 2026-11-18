@@ -215,6 +215,21 @@ def _execute_command(raw: str, yaml_path: str, config: Taskrc = None,
     if "__date_error__" in _pre:
         return f"Error: '{_pre['__date_error__']}' is not a recognised date. Try: today, +3d, eom, monday, YYYY-MM-DD"
 
+    # ── sync stub (also routed here for embedders; the CLI prints a
+    #    rich-marked version of the same message) ─────────────────────────────
+    if first == "sync":
+        return (
+            "sync is intentionally not implemented in taskpeasant.\n\n"
+            "taskpeasant is local-first and never transfers data over a "
+            "network. Suggested alternatives:\n"
+            "  git            - version-control your tasks.yaml and "
+            "push/pull normally\n"
+            "  rsync / cp     - copy the YAML file to another machine "
+            "manually\n"
+            "  network share  - mount a shared drive and point --file at "
+            "the shared path"
+        )
+
     # ── Configuration commands ───────────────────────────────────────────────
     if first == "context":
         return _cmd_context(conf, tokens[1:])

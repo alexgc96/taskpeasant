@@ -198,15 +198,34 @@ def synthesize_tasks(tasks: List[Task], limit: int = 1,
             except (TypeError, ValueError):
                 pass
 
+        # Count the children that already exist and are still upcoming,
+        # then start the walk at the first index that has no child yet,
+        # so the bound below caps how many occurrences are examined per
+        # call instead of how far a template can ever advance.
         futures = 0
         caught_up = 0
         k = 0
-        while k < 1000:
+        while True:
+            due_k = nth_occurrence(base, tpl.recur, k)
+            if due_k is None or (until_dt and due_k > until_dt):
+                break
+            if k not in existing:
+                break
+            if due_k > now:
+                futures += 1
+                if futures >= max(limit, 1):
+                    break
+            k += 1
+        examined = 0
+        while examined < 1000:
             due_k = nth_occurrence(base, tpl.recur, k)
             if due_k is None:
                 break
             if until_dt and due_k > until_dt:
                 break
+            if due_k > now:
+                if futures >= max(limit, 1):
+                    break
             if k not in existing:
                 if due_k <= now:
                     if 0 < catchup_limit <= caught_up:
@@ -215,9 +234,7 @@ def synthesize_tasks(tasks: List[Task], limit: int = 1,
                 new_children.append(_spawn_child(tpl, due_k, k))
             if due_k > now:
                 futures += 1
-                if futures >= max(limit, 1):
-                    k += 1
-                    break
+            examined += 1
             k += 1
 
         # Refresh the mask: one char per generated child index

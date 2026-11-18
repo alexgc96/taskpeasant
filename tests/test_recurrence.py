@@ -177,6 +177,34 @@ def test_synthesize_tasks_uncapped_unless_asked(make_task):
     assert [int(k.imask) for k in kids] == [0, 1, 2]
 
 
+def _template_beyond_1000(make_task, owed=1100):
+    """A daily template due `owed` days ago whose indexes 0..999 already
+    have children, plus those children: index 1000+ are still owed."""
+    tpl = make_task(description="long running", status="recurring",
+                    recur="daily",
+                    due=iso(now_utc() - timedelta(days=owed)))
+    kids = [make_task(description="long running", status="pending",
+                      parent=tpl.uuid, imask=str(i), recur="daily",
+                      due=iso(now_utc() - timedelta(days=owed - i)))
+            for i in range(1000)]
+    return tpl, kids
+
+
+def test_synthesis_advances_past_1000_occurrences(make_task):
+    tpl, kids = _template_beyond_1000(make_task)
+    new, _ = synthesize_tasks([tpl] + kids, catchup_limit=2)
+    assert [int(k.imask) for k in new] == [1000, 1001]
+
+
+def test_template_keeps_advancing_after_1000(make_task):
+    tpl, kids = _template_beyond_1000(make_task)
+    tasks = [tpl] + kids
+    first, _ = synthesize_tasks(tasks, catchup_limit=2)
+    assert [int(k.imask) for k in first] == [1000, 1001]
+    second, _ = synthesize_tasks(tasks + first, catchup_limit=2)
+    assert [int(k.imask) for k in second] == [1002, 1003]
+
+
 def test_no_duplicate_spawning(yaml_file):
     x(f"task {RC_ON} add water due:tomorrow recur:weekly", yaml_file)
     x(f"task {RC_ON} list", yaml_file)

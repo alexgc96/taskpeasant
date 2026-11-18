@@ -9,6 +9,14 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+- Recurring templates no longer stop advancing after 1000 occurrences.
+  `synthesize_tasks` starts each walk at the first occurrence index that
+  has no child yet (existing children are already known from their
+  `imask`), so the 1000 bound caps how many occurrences are examined per
+  call rather than how far a template can ever advance. A `recur:daily`
+  template used to go silent after about 2.7 years. (#24)
+
 ### Tests
 - **Storage guarantees** (`tests/test_storage.py`): cover the atomic-write
   and cross-process-lock behaviour shipped in 0.5.0: a failed replace or dump

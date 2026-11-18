@@ -9,6 +9,13 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Fixed
+- `execute_command("task sync", ...)` now returns the same
+  "intentionally not implemented" message the CLI prints for `sync`
+  (plain text, no markup), instead of treating `sync` as a filter word
+  and answering "No matches.". `execute_command` still returns a plain
+  string and never raises. (#20)
+
 ### Tests
 - **Storage guarantees** (`tests/test_storage.py`): cover the atomic-write
   and cross-process-lock behaviour shipped in 0.5.0: a failed replace or dump

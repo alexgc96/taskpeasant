@@ -278,3 +278,17 @@ def test_import_undoable(yaml_file):
 def test_version(yaml_file):
     out = execute_command("task version", yaml_file)
     assert out.startswith("taskpeasant ")
+
+
+# ── sync stub ─────────────────────────────────────────────────────────────────
+
+def test_sync_stub_reachable_from_library(yaml_file):
+    out = execute_command("task sync", yaml_file)
+    assert "sync" in out and "not implemented" in out
+    assert "git" in out and "rsync" in out
+
+
+def test_sync_stub_is_plain_text(yaml_file):
+    out = execute_command("sync", yaml_file)
+    assert "[" not in out and "]" not in out
+    assert read_tasks(yaml_file) == []
